@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Andallo — Temukan dan Pesan Jasa</title>
+<title>Andallo — Platform Penyedia & Pemesanan Jasa</title>
 
 <!-- ===================== CDN: TAILWIND ===================== -->
 <script src="https://cdn.tailwindcss.com"></script>
@@ -62,102 +62,94 @@
 
   @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important; transition-duration:.001ms !important;} }
 </style>
-<link rel="stylesheet" href="/theme.css"><link rel="icon" type="image/png" href="/assets/andallo-logo.png"><meta name="description" content="Cari penyedia jasa, bandingkan pilihan, dan pesan dengan mudah melalui Andallo."></head>
-<body class="min-h-screen home-active">
+<link rel="stylesheet" href="/theme.css"><link rel="icon" type="image/svg+xml" href="/assets/favicon.svg"><meta name="description" content="Temukan, bandingkan, dan pesan jasa terdekat bersama Andallo."></head>
+<body class="min-h-screen">
 
 <!-- =========================================================================================
      NAVBAR
 ========================================================================================= -->
-<nav class="andallo-navbar sticky top-0 z-40">
-  <div class="nav-main max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <div class="flex items-center justify-between h-[70px] gap-4">
+<nav class="sticky top-0 z-40 shadow-lg" style="background:#0F3D2E;">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-[72px] gap-4">
 
       <!-- Logo -->
-      <a href="#" onclick="showPage('beranda'); return false;" class="brand-link flex items-center gap-2 font-head font-extrabold text-xl shrink-0">
+      <a href="#" onclick="showPage('beranda'); return false;" class="flex items-center gap-2 font-head font-extrabold text-xl text-white shrink-0">
         <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="brand-logo">
         Andallo
       </a>
 
-      <div class="nav-utility hidden xl:flex items-center gap-1">
-        <button onclick="showPage('bantuan')"><i class="fa-regular fa-circle-question"></i> Bantuan</button>
-        <button onclick="currentUser ? goToDashboard() : openModal('modalMasuk')"><i class="fa-regular fa-clipboard"></i> Pesanan</button>
+      <!-- Menu Utama (desktop) -->
+      <ul class="hidden lg:flex items-center gap-1">
+        <li><a href="#" onclick="showPage('beranda'); return false;" class="nav-link px-4 py-2 rounded-full font-semibold text-sm text-white/80 hover:bg-white/10 hover:text-white transition" data-nav="beranda">Beranda</a></li>
+        <li><a href="#" onclick="showPage('jasa'); return false;" class="nav-link px-4 py-2 rounded-full font-semibold text-sm text-white/80 hover:bg-white/10 hover:text-white transition" data-nav="jasa">Cari Jasa</a></li>
+        <li><a href="#" onclick="showPage('bandingkan'); return false;" class="nav-link px-4 py-2 rounded-full font-semibold text-sm text-white/80 hover:bg-white/10 hover:text-white transition flex items-center gap-2" data-nav="bandingkan">Bandingkan <span id="navCompareCount" class="hidden min-w-5 h-5 px-1 rounded-full items-center justify-center text-[10px] text-[#0F3D2E] bg-[#FF9B21]">0</span></a></li>
+        <li><a href="#" onclick="showPage('bantuan'); return false;" class="nav-link px-4 py-2 rounded-full font-semibold text-sm text-white/80 hover:bg-white/10 hover:text-white transition" data-nav="bantuan">Bantuan</a></li>
+      </ul>
+
+      <!-- Filter Cepat (desktop) -->
+      <div class="hidden xl:flex items-center gap-2">
+        <div class="relative">
+          <button onclick="toggleDropdown('navSortDropdown')" class="flex items-center gap-2 px-3 py-2 rounded-full bg-white/10 text-white text-xs font-semibold hover:bg-white/20 transition">
+            <i class="fa-solid fa-sort"></i> Harga
+          </button>
+          <div id="navSortDropdown" class="dropdown-panel hidden absolute top-[110%] left-0 bg-white rounded-xl shadow-xl p-2 w-48 z-30">
+            <button onclick="quickSort('harga-asc')" class="w-full text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#EAF5F0] text-[#1C2620]">Termurah</button>
+            <button onclick="quickSort('harga-desc')" class="w-full text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#EAF5F0] text-[#1C2620]">Termahal</button>
+          </div>
+        </div>
+        <div class="relative">
+          <button onclick="toggleDropdown('navRadiusDropdown')" class="flex items-center gap-2 px-3 py-2 rounded-full bg-white/10 text-white text-xs font-semibold hover:bg-white/20 transition">
+            <i class="fa-solid fa-location-crosshairs"></i> Radius
+          </button>
+          <div id="navRadiusDropdown" class="dropdown-panel hidden absolute top-[110%] left-0 bg-white rounded-xl shadow-xl p-2 w-40 z-30">
+            <button onclick="quickRadius(5)" class="w-full text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#EAF5F0] text-[#1C2620]">5 km</button>
+            <button onclick="quickRadius(10)" class="w-full text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#EAF5F0] text-[#1C2620]">10 km</button>
+            <button onclick="quickRadius(15)" class="w-full text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#EAF5F0] text-[#1C2620]">15 km</button>
+            <button onclick="quickRadius(20)" class="w-full text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#EAF5F0] text-[#1C2620]">20 km</button>
+            <button onclick="quickRadius(40)" class="w-full text-left px-3 py-2 rounded-lg text-sm font-medium hover:bg-[#EAF5F0] text-[#1C2620]">40 km</button>
+          </div>
+        </div>
       </div>
 
       <!-- Auth Area -->
       <div id="navAuthArea" class="flex items-center gap-2"></div>
 
       <!-- Hamburger (mobile) -->
-      <button onclick="toggleMobileMenu()" class="menu-toggle lg:hidden p-2" aria-label="Buka menu">
+      <button onclick="toggleMobileMenu()" class="lg:hidden text-white p-2" aria-label="Buka menu">
         <i class="fa-solid fa-bars text-xl"></i>
       </button>
     </div>
   </div>
 
-  <div class="nav-products hidden lg:block">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1">
-      <a href="#" onclick="showPage('beranda'); return false;" class="nav-link" data-nav="beranda"><i class="fa-solid fa-house"></i> Beranda</a>
-      <a href="#" onclick="goToCategory('Cukur Pria'); return false;" class="product-link"><i class="fa-solid fa-scissors"></i> Perawatan</a>
-      <a href="#" onclick="goToCategory('Cleaning Service'); return false;" class="product-link"><i class="fa-solid fa-broom"></i> Kebersihan</a>
-      <a href="#" onclick="goToCategory('Teknisi AC & Elektronik'); return false;" class="product-link"><i class="fa-solid fa-screwdriver-wrench"></i> Teknisi</a>
-      <a href="#" onclick="goToCategory('Fotografer'); return false;" class="product-link"><i class="fa-solid fa-camera"></i> Kreatif</a>
-      <a href="#" onclick="showPage('jasa'); return false;" class="nav-link" data-nav="jasa"><i class="fa-solid fa-grip"></i> Semua Jasa</a>
-      <a href="#" onclick="showPage('bandingkan'); return false;" class="nav-link" data-nav="bandingkan"><i class="fa-solid fa-scale-balanced"></i> Bandingkan <span id="navCompareCount" class="hidden min-w-5 h-5 px-1 rounded-full items-center justify-center text-[10px]">0</span></a>
+  <!-- Mobile Menu -->
+  <div id="mobileMenu" class="hidden lg:hidden flex-col px-4 pb-4 gap-1" style="background:#0F3D2E;">
+    <a href="#" onclick="showPage('beranda'); toggleMobileMenu(); return false;" class="block text-white/85 font-semibold py-3 border-b border-white/10">Beranda</a>
+    <a href="#" onclick="showPage('jasa'); toggleMobileMenu(); return false;" class="block text-white/85 font-semibold py-3 border-b border-white/10">Cari Jasa</a>
+    <a href="#" onclick="showPage('bandingkan'); toggleMobileMenu(); return false;" class="flex items-center justify-between text-white/85 font-semibold py-3 border-b border-white/10"><span>Bandingkan Harga</span><span id="mobileCompareCount" class="hidden min-w-6 h-6 px-1 rounded-full items-center justify-center text-[10px] text-[#0F3D2E] bg-[#FF9B21]">0</span></a>
+    <a href="#" onclick="showPage('bantuan'); toggleMobileMenu(); return false;" class="block text-white/85 font-semibold py-3 border-b border-white/10">Bantuan</a>
+    <div class="flex gap-2 py-3">
+      <button onclick="quickSort('harga-asc')" class="flex-1 bg-white/10 text-white text-xs font-semibold rounded-lg py-2">Harga Termurah</button>
+      <button onclick="quickRadius(10)" class="flex-1 bg-white/10 text-white text-xs font-semibold rounded-lg py-2">Radius 10km</button>
     </div>
   </div>
-
-  <!-- Mobile Menu -->
-  <div id="mobileMenu" class="hidden lg:hidden flex-col px-4 pb-4 gap-1">
-    <a href="#" onclick="showPage('beranda'); toggleMobileMenu(); return false;"><i class="fa-solid fa-house"></i> Beranda</a>
-    <a href="#" onclick="showPage('jasa'); toggleMobileMenu(); return false;"><i class="fa-solid fa-grip"></i> Semua Jasa</a>
-    <a href="#" onclick="showPage('bandingkan'); toggleMobileMenu(); return false;" class="flex items-center justify-between"><span><i class="fa-solid fa-scale-balanced"></i> Bandingkan</span><span id="mobileCompareCount" class="hidden min-w-6 h-6 px-1 rounded-full items-center justify-center text-[10px]">0</span></a>
-    <a href="#" onclick="showPage('bantuan'); toggleMobileMenu(); return false;"><i class="fa-regular fa-circle-question"></i> Bantuan</a>
-  </div>
 </nav>
+<div class="demo-notice">MVP privat · Akun dan pembayaran demo. Jangan transfer uang sungguhan.</div>
 
 <!-- =========================================================================================
      PAGE: BERANDA
 ========================================================================================= -->
 <section id="page-beranda" class="page active">
 
-<div class="service-hero">
-  <div class="hero-inner">
-    <div class="hero-copy">
-      <span class="hero-eyebrow">LAYANAN TERPERCAYA DI SEKITARMU</span>
-      <h1>Butuh bantuan apa<br>hari ini?</h1>
-      <p>Cari penyedia sesuai kebutuhan, lihat detailnya, dan ajukan pesanan.</p>
-    </div>
-    <div class="service-booking-card">
-      <form class="hero-search-panel" onsubmit="heroSearch(event)">
-        <label class="hero-field hero-field-main">
-          <span>Jasa yang kamu cari</span>
-          <div><i class="fa-solid fa-magnifying-glass"></i><input id="heroSearchInput" type="search" placeholder="Contoh: servis AC atau fotografer" aria-label="Jasa yang kamu cari"></div>
-        </label>
-        <label class="hero-field">
-          <span>Lokasi layanan</span>
-          <div><i class="fa-solid fa-location-dot"></i><select id="heroCityInput" aria-label="Lokasi layanan"><option value="">Semua lokasi</option><option>Tangerang</option><option>Jakarta</option><option>Bekasi</option><option>Depok</option><option>Bandung</option><option>Surabaya</option><option>Yogyakarta</option></select></div>
-        </label>
-        <button type="submit" class="hero-search-button">Cari Jasa</button>
-      </form>
-    </div>
-  </div>
-</div>
+<div class="service-hero"><div class="hero-copy"><span class="hero-eyebrow">JASA TERDEKAT, HIDUP LEBIH MUDAH</span><h1>Ada yang perlu dibantu?<br><strong>Andallo-in aja.</strong></h1><p>Temukan jasa, bandingkan harga, dan pesan sesuai kebutuhanmu.</p></div>
+<div class="service-search"><div id="categoryGrid" class="category-tabs"></div><form onsubmit="heroSearch(event)" class="hero-fields"><label><span><i class="fa-solid fa-magnifying-glass"></i> Kamu butuh jasa apa?</span><input id="heroQuery" placeholder="Coba: bersih rumah" aria-label="Cari jasa"></label><label><span><i class="fa-solid fa-location-dot"></i> Lokasi layanan</span><select id="heroCity" aria-label="Lokasi layanan"><option value="">Semua kota</option><option>Tangerang</option><option>Jakarta</option><option>Bekasi</option><option>Bandung</option><option>Surabaya</option></select></label><label><span><i class="fa-solid fa-sliders"></i> Urutkan pilihanmu</span><select id="heroSort" aria-label="Urutan jasa"><option value="distance">Lokasi terdekat</option><option value="harga-asc">Harga termurah</option><option value="rating">Rating tertinggi</option></select></label><button class="search-cta" type="submit">Cari Jasa <i class="fa-solid fa-arrow-right"></i></button></form><div class="search-note"><i class="fa-solid fa-shield-heart"></i> Pesan dahulu, bayar setelah penyedia menerima. <button onclick="showPage('bantuan')">Lihat cara kerjanya</button></div></div></div>
 <div class="benefit-strip"><span><i class="fa-solid fa-scale-balanced"></i> Bandingkan harga dengan mudah</span><span><i class="fa-solid fa-location-dot"></i> Pilihan jasa di sekitarmu</span><span><i class="fa-solid fa-receipt"></i> Status pembayaran transparan</span></div><span id="statProviders" hidden></span>
-  <div class="category-section">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-end justify-between gap-4 mb-5">
-        <div><h2 class="font-head font-extrabold text-2xl">Kategori Pilihan</h2><p class="text-sm text-[#66716A] mt-1">Pilih layanan yang paling kamu butuhkan.</p></div>
-        <button onclick="showPage('jasa')" class="text-sm font-bold text-sky-700">Lihat semua</button>
-      </div>
-      <div id="categoryGrid" class="category-tabs"></div>
-    </div>
-  </div>
   <!-- Penyedia Pilihan -->
   <div class="py-14" style="background:#EAF5F0;">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-wrap justify-between items-end gap-4 mb-8">
         <div>
           <h2 class="font-head font-extrabold text-2xl md:text-3xl" style="color:#0F3D2E;">Penyedia Jasa Pilihan</h2>
-          <p class="text-[#66716A] text-sm mt-1">Pilihan penyedia dari katalog Andallo. Harga dan jarak bersifat perkiraan.</p>
+          <p class="text-[#66716A] text-sm mt-1">Penyedia berperingkat tinggi yang tersedia di sekitarmu.</p>
         </div>
         <button onclick="showPage('jasa')" class="px-5 py-2.5 rounded-full font-bold text-sm border border-[#DCE9E2] bg-white hover:bg-[#F5FAF8] transition">Jelajahi Semua</button>
       </div>
@@ -170,7 +162,7 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="mb-8">
         <h2 class="font-head font-extrabold text-2xl md:text-3xl" style="color:#0F3D2E;">Apa kata Andallers?</h2>
-        <p class="text-[#66716A] text-sm mt-1">Contoh ulasan dari katalog layanan Andallo.</p>
+        <p class="text-[#66716A] text-sm mt-1">Pengalaman pengguna setelah memesan layanan melalui Andallo.</p>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6" id="testimonialGrid"></div>
     </div>
@@ -198,6 +190,14 @@
         </select>
         <select id="filterKota" onchange="applyFilters()" class="w-full lg:w-auto rounded-xl px-4 py-3 text-sm font-medium border border-[#DCE9E2]">
           <option value="">Semua Kota</option>
+        </select>
+        <select id="filterRadius" onchange="applyFilters()" class="w-full lg:w-auto rounded-xl px-4 py-3 text-sm font-medium border border-[#DCE9E2]">
+          <option value="999">Semua Radius</option>
+          <option value="5">Maks. 5 km</option>
+          <option value="10">Maks. 10 km</option>
+          <option value="15">Maks. 15 km</option>
+          <option value="20">Maks. 20 km</option>
+          <option value="40">Maks. 40 km</option>
         </select>
         <select id="filterSort" onchange="applyFilters()" class="sm:col-span-2 lg:col-span-1 w-full lg:w-auto rounded-xl px-4 py-3 text-sm font-medium border border-[#DCE9E2]">
           <option value="rekomendasi">Urutkan: Rekomendasi</option>
@@ -314,7 +314,7 @@
   <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-14 grid md:grid-cols-2 gap-10 items-start">
     <div class="bg-white rounded-3xl shadow-lg border border-[#DCE9E2] p-8">
       <h2 class="font-head font-bold text-xl text-center mb-1" style="color:#0F3D2E;">Kirim Pesan Bantuan</h2>
-      <p class="text-center text-sm text-[#66716A] mb-6">Tulis pertanyaanmu untuk melihat pratinjau. Pengiriman pesan belum tersedia.</p>
+      <p class="text-center text-sm text-[#66716A] mb-6">Isi formulir berikut, tim Andallo akan merespons secepatnya.</p>
       <form onsubmit="submitBantuan(event)">
         <div class="mb-4">
           <label class="block text-xs font-bold text-[#3A453D] mb-2">Nama</label>
@@ -345,9 +345,9 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 pb-9 border-b border-white/10">
       <div>
         <div class="flex items-center gap-2 font-head font-extrabold text-lg text-white mb-3">
-          <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="footer-logo"> Andallo
+          <img src="/assets/andallo-logo.svg" alt="" class="w-9 h-9"> Andallo
         </div>
-        <p class="text-sm text-white/65 max-w-xs mb-4">Temukan jasa untuk kebutuhan sehari-hari dengan harga dan pilihan layanan yang jelas.</p>
+        <p class="text-sm text-white/65 max-w-xs mb-4">Platform yang mempertemukan kamu dengan penyedia jasa terpercaya — cepat, aman, dan transparan.</p>
       </div>
       <div>
         <h4 class="text-white font-head font-bold text-sm mb-4">Navigasi</h4>
@@ -360,13 +360,11 @@
         <button onclick="showPage('bantuan')" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Pusat Bantuan</button>
         <button onclick="footerHelp(0)" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Cara Memesan</button>
         <button onclick="footerHelp(1)" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Pembayaran</button>
-        <button onclick="footerHelp(5)" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Privasi Data</button>
-        <button onclick="footerHelp(6)" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Ketentuan Penggunaan</button>
       </div>
     </div>
     <div class="flex flex-wrap justify-between gap-3 pt-6 text-xs text-white/55">
       <span>© 2026 Andallo. Semua hak dilindungi.</span>
-      <span>Layanan jasa dalam satu tempat.</span>
+      <span>Menghubungkan Andallers dengan jasa terpercaya di seluruh Indonesia.</span>
     </div>
   </div>
 </footer>
@@ -393,7 +391,7 @@
   <div class="modal-box bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative max-h-[90vh] overflow-y-auto">
     <button onclick="closeModal('modalMasuk')" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#EAF5F0]"><i class="fa-solid fa-xmark"></i></button>
     <div class="text-center mb-6">
-      <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="w-14 h-14 mx-auto mb-3 brand-tile">
+      <img src="/assets/andallo-logo.svg" alt="Logo Andallo" class="w-14 h-14 mx-auto mb-3">
       <h2 class="font-head font-bold text-xl" style="color:#0F3D2E;">Masuk ke Andallo</h2>
       <p class="text-sm text-[#66716A]">Selamat datang kembali, Andallers!</p>
     </div>
@@ -420,7 +418,7 @@
   <div class="modal-box bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative max-h-[90vh] overflow-y-auto">
     <button onclick="closeModal('modalDaftar')" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#EAF5F0]"><i class="fa-solid fa-xmark"></i></button>
     <div class="text-center mb-6">
-      <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="w-14 h-14 mx-auto mb-3 brand-tile">
+      <img src="/assets/andallo-logo.svg" alt="Logo Andallo" class="w-14 h-14 mx-auto mb-3">
       <h2 class="font-head font-bold text-xl" style="color:#0F3D2E;">Daftar Akun Baru</h2>
       <p class="text-sm text-[#66716A]">Gabung jadi Andallers dan temukan jasa terbaik.</p>
     </div>
@@ -451,17 +449,17 @@
   <div class="modal-box bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
     <button onclick="closeModal('modalVerifikasi')" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#EAF5F0]"><i class="fa-solid fa-xmark"></i></button>
     <div class="text-center mb-6">
-      <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="w-14 h-14 mx-auto mb-3 brand-tile">
-      <h2 class="font-head font-bold text-xl" style="color:#0F3D2E;">Aktivasi Akun Contoh</h2>
-      <p class="text-sm text-[#66716A]">Aktifkan akun contoh untuk <b id="verifEmailTarget"></b></p>
+      <img src="/assets/andallo-logo.svg" alt="Logo Andallo" class="w-14 h-14 mx-auto mb-3">
+      <h2 class="font-head font-bold text-xl" style="color:#0F3D2E;">Verifikasi Email Kamu</h2>
+      <p class="text-sm text-[#66716A]">Tautan verifikasi telah dikirim ke <b id="verifEmailTarget"></b></p>
     </div>
     <div class="rounded-2xl p-5 border-2 border-dashed" style="background:#EAF5F0; border-color:#B45309;">
       <div class="flex items-center gap-3 mb-3">
         <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background:#FF9B21;"><i class="fa-solid fa-envelope text-[#0F3D2E]"></i></div>
-        <div><b class="block text-sm" style="color:#0F3D2E;">Konfirmasi Pendaftaran</b><span class="text-xs text-[#66716A]">Lanjutkan dengan akun contoh</span></div>
+        <div><b class="block text-sm" style="color:#0F3D2E;">Konfirmasi Email</b><span class="text-xs text-[#66716A]">Aktifkan akun untuk melanjutkan ke Andallo</span></div>
       </div>
-      <p class="text-sm mb-4">Halo, terima kasih telah mendaftar di Andallo! Klik tombol di bawah untuk mengaktifkan akun contoh.</p>
-      <button onclick="confirmVerification()" class="w-full py-3 rounded-full font-bold text-sm text-[#0F3D2E]" style="background:#FF9B21;">Aktifkan Akun</button>
+      <p class="text-sm mb-4">Halo, terima kasih telah mendaftar di Andallo! Klik tombol di bawah untuk memverifikasi email dan mengaktifkan akunmu.</p>
+      <button onclick="confirmVerification()" class="w-full py-3 rounded-full font-bold text-sm text-[#0F3D2E]" style="background:#FF9B21;">Verifikasi Sekarang</button>
     </div>
   </div>
 </div>
@@ -472,7 +470,7 @@
 <div class="modal-overlay" id="modalBooking">
   <div class="modal-box bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
     <button onclick="closeModal('modalBooking')" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#EAF5F0]"><i class="fa-solid fa-xmark"></i></button>
-    <h2 class="font-head font-bold text-xl mb-1" style="color:#0F3D2E;">Ajukan Pesanan Jasa</h2>
+    <h2 class="font-head font-bold text-xl mb-1" style="color:#0F3D2E;">Hubungi & Booking Penyedia</h2>
     <p class="text-sm text-[#66716A] mb-6" id="bookingProviderName"></p>
     <form onsubmit="handleBookingSubmit(event)">
       <div class="mb-4">
@@ -483,12 +481,18 @@
         <label class="block text-xs font-bold text-[#3A453D] mb-2">Jam</label>
         <input id="bookingTime" type="time" required class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54]">
       </div>
+      <div class="mb-4">
+        <label class="block text-xs font-bold text-[#3A453D] mb-2" for="bookingProof">Upload Bukti Transfer <span class="text-red-600">*</span></label>
+        <input id="bookingProof" type="file" accept="image/jpeg,image/png" required class="booking-upload w-full text-sm" onchange="previewBookingProof(this)">
+        <p class="text-xs text-[#66716A] mt-2">Format JPG atau PNG, maksimal 5 MB.</p>
+        <div id="bookingProofPreview" class="upload-preview"><img alt="Pratinjau bukti transfer"><span class="text-sm font-semibold text-sky-800"></span></div>
+      </div>
       <div class="rounded-xl p-4 flex justify-between items-center mb-6" style="background:#EAF5F0;">
         <span class="text-sm font-semibold text-[#3A453D]">Total Harga (mulai dari)</span>
         <span class="font-head font-extrabold text-lg" id="bookingTotalPrice" style="color:#1B4D3E;">Rp0</span>
       </div>
       <p id="bookingFeedback" class="text-sm text-sky-800 mb-3" role="status"></p>
-      <button type="submit" class="w-full py-3.5 rounded-full font-bold text-sm text-[#0F3D2E] hover:-translate-y-0.5 transition" style="background:#FF9B21;">Kirim Permintaan Booking</button>
+      <button type="submit" class="w-full py-3.5 rounded-full font-bold text-sm text-[#0F3D2E] hover:-translate-y-0.5 transition" style="background:#FF9B21;">Kirim Booking & Bukti Transfer</button>
     </form>
   </div>
 </div>
@@ -514,7 +518,7 @@
 ========================================================================================= -->
 <div class="welcome-overlay" id="welcomeOverlay">
   <div class="max-w-2xl">
-    <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="welcome-mark w-16 h-16 mx-auto mb-7 brand-tile">
+    <img src="/assets/andallo-logo.svg" alt="Logo Andallo" class="welcome-mark w-16 h-16 mx-auto mb-7">
     <div class="welcome-line font-head font-extrabold text-white leading-snug" style="font-size:clamp(22px,4.4vw,40px);" id="welcomeLine"></div>
   </div>
 </div>
@@ -537,11 +541,8 @@
 /* ---------------------------------------------------------------------------------------
    1. DUMMY DATA
 --------------------------------------------------------------------------------------- */
-let users = [
-  { email:'rieke@andallo.com', password:'demo123', name:'Rieke Setiawati', role:'customer', verified:true },
-  { email:'barber@andallo.com', password:'demo123', name:'Barber Master Cut', role:'provider', verified:true },
-  { email:'admin@andallo.com', password:'demo123', name:'Admin Main System', role:'admin', verified:true }
-];
+// No public demo credentials are bundled with the repository.
+let users = [];
 
 let pendingVerification = null; // {nama,email,password} menunggu "verifikasi email"
 let currentUser = null;
@@ -554,10 +555,10 @@ const categories = [
 ];
 
 let providers = [
-  /* ===== CUKUR PRIA (contoh penyedia jasa) ===== */
+  /* ===== CUKUR PRIA (5 contoh, radius & harga bervariasi) ===== */
   {
-    id:1, name:'Bara Barbershop', category:'Cukur Pria', city:'Jakarta',
-    priceMin:50000, priceMax:85000, rating:4.9, providerEmail:'barber@andallo.com',
+    id:1, name:'Bara Barbershop', category:'Cukur Pria', city:'Jakarta', radius:5,
+    priceMin:50000, priceMax:85000, rating:4.9, providerEmail:'provider@example.invalid',
     photo:'',
     portfolio:[],
     desc:'Bara Barbershop menghadirkan potongan rambut pria modern dengan barber berpengalaman lebih dari 8 tahun. Melayani panggilan ke rumah maupun booking langsung di tempat.',
@@ -567,7 +568,7 @@ let providers = [
     ]
   },
   {
-    id:5, name:"Gentleman's Cut Studio", category:'Cukur Pria', city:'Jakarta Selatan',
+    id:5, name:"Gentleman's Cut Studio", category:'Cukur Pria', city:'Jakarta Selatan', radius:8,
     priceMin:65000, priceMax:120000, rating:4.7, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -578,7 +579,7 @@ let providers = [
     ]
   },
   {
-    id:6, name:'Kilau Barbershop Express', category:'Cukur Pria', city:'Depok',
+    id:6, name:'Kilau Barbershop Express', category:'Cukur Pria', city:'Depok', radius:3,
     priceMin:35000, priceMax:60000, rating:4.5, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -589,7 +590,7 @@ let providers = [
     ]
   },
   {
-    id:7, name:"Prestige Men's Grooming", category:'Cukur Pria', city:'Jakarta Pusat',
+    id:7, name:"Prestige Men's Grooming", category:'Cukur Pria', city:'Jakarta Pusat', radius:12,
     priceMin:90000, priceMax:180000, rating:4.8, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -600,7 +601,7 @@ let providers = [
     ]
   },
   {
-    id:8, name:'Rapi Cukur Panggilan', category:'Cukur Pria', city:'Bekasi',
+    id:8, name:'Rapi Cukur Panggilan', category:'Cukur Pria', city:'Bekasi', radius:20,
     priceMin:45000, priceMax:75000, rating:4.4, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -611,9 +612,9 @@ let providers = [
     ]
   },
 
-  /* ===== FOTOGRAFER (contoh penyedia jasa) ===== */
+  /* ===== FOTOGRAFER (5 contoh, radius & harga bervariasi) ===== */
   {
-    id:2, name:'Rasya Photoworks', category:'Fotografer', city:'Bandung',
+    id:2, name:'Rasya Photoworks', category:'Fotografer', city:'Bandung', radius:15,
     priceMin:350000, priceMax:750000, rating:4.8, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -624,7 +625,7 @@ let providers = [
     ]
   },
   {
-    id:9, name:'Lensa Kita Photography', category:'Fotografer', city:'Jakarta',
+    id:9, name:'Lensa Kita Photography', category:'Fotografer', city:'Jakarta', radius:10,
     priceMin:250000, priceMax:500000, rating:4.6, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -635,7 +636,7 @@ let providers = [
     ]
   },
   {
-    id:10, name:'Momentum Studio', category:'Fotografer', city:'Surabaya',
+    id:10, name:'Momentum Studio', category:'Fotografer', city:'Surabaya', radius:25,
     priceMin:500000, priceMax:1200000, rating:4.9, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -646,7 +647,7 @@ let providers = [
     ]
   },
   {
-    id:11, name:'Candid Frame Photo', category:'Fotografer', city:'Bandung',
+    id:11, name:'Candid Frame Photo', category:'Fotografer', city:'Bandung', radius:5,
     priceMin:150000, priceMax:300000, rating:4.3, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -657,7 +658,7 @@ let providers = [
     ]
   },
   {
-    id:12, name:'Skyline Visual Works', category:'Fotografer', city:'Yogyakarta',
+    id:12, name:'Skyline Visual Works', category:'Fotografer', city:'Yogyakarta', radius:40,
     priceMin:400000, priceMax:900000, rating:4.7, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -668,9 +669,9 @@ let providers = [
     ]
   },
 
-  /* ===== CLEANING SERVICE (contoh penyedia jasa) ===== */
+  /* ===== CLEANING SERVICE (5 contoh, radius & harga bervariasi) ===== */
   {
-    id:3, name:'Bersih Kinclong', category:'Cleaning Service', city:'Jakarta',
+    id:3, name:'Bersih Kinclong', category:'Cleaning Service', city:'Jakarta', radius:10,
     priceMin:120000, priceMax:250000, rating:4.6, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -681,7 +682,7 @@ let providers = [
     ]
   },
   {
-    id:13, name:'Rapih Home Cleaning', category:'Cleaning Service', city:'Tangerang',
+    id:13, name:'Rapih Home Cleaning', category:'Cleaning Service', city:'Tangerang', radius:7,
     priceMin:100000, priceMax:200000, rating:4.5, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -692,7 +693,7 @@ let providers = [
     ]
   },
   {
-    id:14, name:'Kilat Bersih Group', category:'Cleaning Service', city:'Jakarta',
+    id:14, name:'Kilat Bersih Group', category:'Cleaning Service', city:'Jakarta', radius:15,
     priceMin:150000, priceMax:320000, rating:4.7, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -703,7 +704,7 @@ let providers = [
     ]
   },
   {
-    id:15, name:'Sapu Jagat Cleaning', category:'Cleaning Service', city:'Bekasi',
+    id:15, name:'Sapu Jagat Cleaning', category:'Cleaning Service', city:'Bekasi', radius:4,
     priceMin:80000, priceMax:150000, rating:4.2, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -714,7 +715,7 @@ let providers = [
     ]
   },
   {
-    id:16, name:'Segar Ceria Housekeeping', category:'Cleaning Service', city:'Depok',
+    id:16, name:'Segar Ceria Housekeeping', category:'Cleaning Service', city:'Depok', radius:20,
     priceMin:130000, priceMax:280000, rating:4.6, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -725,9 +726,9 @@ let providers = [
     ]
   },
 
-  /* ===== TEKNISI AC & ELEKTRONIK (contoh penyedia jasa) ===== */
+  /* ===== TEKNISI AC & ELEKTRONIK (5 contoh, radius & harga bervariasi) ===== */
   {
-    id:4, name:'Fixindo Teknisi AC', category:'Teknisi AC & Elektronik', city:'Tangerang',
+    id:4, name:'Fixindo Teknisi AC', category:'Teknisi AC & Elektronik', city:'Tangerang', radius:8,
     priceMin:75000, priceMax:200000, rating:4.6, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -738,7 +739,7 @@ let providers = [
     ]
   },
   {
-    id:17, name:'Dingin Sejuk Service AC', category:'Teknisi AC & Elektronik', city:'Jakarta',
+    id:17, name:'Dingin Sejuk Service AC', category:'Teknisi AC & Elektronik', city:'Jakarta', radius:6,
     priceMin:90000, priceMax:220000, rating:4.5, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -749,7 +750,7 @@ let providers = [
     ]
   },
   {
-    id:18, name:'Elektro Andal Teknisi', category:'Teknisi AC & Elektronik', city:'Bekasi',
+    id:18, name:'Elektro Andal Teknisi', category:'Teknisi AC & Elektronik', city:'Bekasi', radius:12,
     priceMin:60000, priceMax:180000, rating:4.4, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -760,7 +761,7 @@ let providers = [
     ]
   },
   {
-    id:19, name:'Servis Kilat Elektronik', category:'Teknisi AC & Elektronik', city:'Tangerang Selatan',
+    id:19, name:'Servis Kilat Elektronik', category:'Teknisi AC & Elektronik', city:'Tangerang Selatan', radius:3,
     priceMin:50000, priceMax:150000, rating:4.3, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -771,7 +772,7 @@ let providers = [
     ]
   },
   {
-    id:20, name:'Garansi Prima Teknisi', category:'Teknisi AC & Elektronik', city:'Jakarta',
+    id:20, name:'Garansi Prima Teknisi', category:'Teknisi AC & Elektronik', city:'Jakarta', radius:18,
     priceMin:100000, priceMax:250000, rating:4.8, providerEmail:null,
     photo:'',
     portfolio:[],
@@ -813,28 +814,20 @@ providers.forEach((provider, index) => {
   provider.portfolio = [1, 2, 3].map(offset => images[(index + offset) % images.length]);
 });
 
-let legacyBookings = [
-  { id:1, customerEmail:'rieke@andallo.com', providerId:1, date:'2026-09-08', time:'10:00', total:50000, status:'SELESAI', rated:false,
-    chat:[ {sender:'customer', text:'Halo kak, saya sudah booking untuk hari ini ya', time:'09.50'}, {sender:'provider', text:'Siap kak, saya meluncur ke lokasi jam 10 tepat.', time:'09.52'} ] },
-  { id:2, customerEmail:'rieke@andallo.com', providerId:2, date:'2026-09-16', time:'14:00', total:350000, status:'ON_PROGRESS', rated:false,
-    chat:[ {sender:'customer', text:'Sesi foto hari ini di taman kota ya kak', time:'13.40'}, {sender:'provider', text:'Baik, saya sudah di lokasi dan sedang menyiapkan alat.', time:'13.45'} ] },
-  { id:3, customerEmail:'rieke@andallo.com', providerId:3, date:'2026-09-20', time:'09:00', total:120000, status:'DIMULAI', rated:false, chat:[] },
-  { id:4, customerEmail:'rieke@andallo.com', providerId:4, date:'2026-09-22', time:'11:00', total:75000, status:'PENDING', rated:false, chat:[] }
-];
+let legacyBookings = [];
 let bookings = [];
 let bookingIdCounter = 5;
 
 const faqData = [
-  {q:'Bagaimana cara memesan jasa di Andallo?', a:'Cari penyedia di halaman Cari Jasa, buka detailnya, lalu ajukan pesanan sesuai tanggal dan jam pilihan. Setelah penyedia menerima, unggah bukti pembayaran dari halaman Pesanan Saya.'},
-  {q:'Bagaimana sistem pembayaran dan harga di Andallo?', a:'Harga yang tertera merupakan harga mulai. Pada contoh ini, penyedia menerima pesanan terlebih dahulu, pelanggan mengunggah gambar bukti pembayaran, lalu admin memverifikasi sebelum layanan dimulai. Tidak ada transfer uang sungguhan.'},
+  {q:'Bagaimana cara memesan jasa di Andallo?', a:'Cari penyedia di halaman Cari Jasa, buka detailnya, lalu pilih Hubungi Penyedia. Tentukan tanggal dan jam layanan, unggah bukti transfer, kemudian kirim booking.'},
+  {q:'Bagaimana sistem pembayaran dan harga di Andallo?', a:'Harga yang tertera merupakan harga mulai. Setelah booking dan bukti transfer dikirim, mitra akan memeriksa pembayaran lalu memperbarui status pesanan menjadi Diterima.'},
   {q:'Kapan saya bisa memberi rating ke penyedia jasa?', a:'Tombol "Beri Rating & Ulasan" akan aktif di Dashboard kamu setelah status pesanan diubah menjadi SELESAI oleh penyedia jasa atau admin.'},
   {q:'Bagaimana cara menjadi mitra penyedia jasa?', a:'Kirim pesan melalui formulir Bantuan dengan mencantumkan jenis jasa, lokasi, dan pengalamanmu — tim kami akan menghubungimu untuk proses verifikasi.'},
   {q:'Apa saja standar kerapihan Andallo?', a:'Setiap mitra wajib menyelesaikan pekerjaan sesuai deskripsi jasa, tepat waktu, dan menjaga kebersihan area kerja sebelum status ditandai SELESAI.'},
-  {q:'Bagaimana kebijakan privasi data saya?', a:'Situs ini menggunakan akun contoh. Pesanan, chat, dan gambar bukti disimpan dalam ruang privat pemilik situs. Jangan unggah data atau bukti transfer sungguhan.'},
-  {q:'Apa ketentuan penggunaan Andallo saat ini?', a:'Ini adalah situs contoh untuk mencoba pencarian, perbandingan, dan pemesanan jasa. Penyedia dan ulasan merupakan data contoh; tidak ada transaksi uang atau konfirmasi layanan nyata.'}
+  {q:'Bagaimana kebijakan privasi data saya?', a:'Data pribadi pengguna seperti email hanya digunakan untuk keperluan login dan komunikasi terkait layanan, serta tidak dibagikan ke pihak ketiga tanpa izin.'}
 ];
 
-let filterState = { search:'', kategori:'', kota:'', sort:'rekomendasi' };
+let filterState = { search:'', kategori:'', kota:'', sort:'rekomendasi', radius:999 };
 let activeLocation = { lat:-6.1783, lng:106.6319, label:'Tangerang' };
 const cityCoordinates = {
   'Tangerang':[-6.1783,106.6319], 'Tangerang Selatan':[-6.2886,106.7179],
@@ -866,15 +859,14 @@ function providerDistance(provider){
   const coords = cityCoordinates[provider.city] || cityCoordinates['Jakarta'];
   return distanceKm(activeLocation.lat,activeLocation.lng,coords[0],coords[1]) + ((provider.id % 5) * .28);
 }
-function heroSearch(event){
+function navbarSearch(event){
   event.preventDefault();
-  const query = document.getElementById('heroSearchInput').value.trim();
-  const city = document.getElementById('heroCityInput').value;
+  const query = event.currentTarget.querySelector('input').value.trim();
   document.getElementById('searchInput').value = query;
-  document.getElementById('filterKota').value = city;
   showPage('jasa');
   applyFilters();
 }
+function heroSearch(e){e.preventDefault();document.getElementById('searchInput').value=document.getElementById('heroQuery').value;document.getElementById('filterKota').value=document.getElementById('heroCity').value;document.getElementById('filterSort').value=document.getElementById('heroSort').value;document.getElementById('filterKategori').value='';showPage('jasa');applyFilters();}
 function detectUserLocation(){
   if(!navigator.geolocation){ showToast('Browser ini tidak mendukung deteksi lokasi.'); return; }
   const button = document.getElementById('locationButton');
@@ -901,7 +893,6 @@ function detectUserLocation(){
 function showPage(pageId){
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-'+pageId).classList.add('active');
-  document.body.classList.toggle('home-active', pageId === 'beranda');
   document.querySelectorAll('.nav-link').forEach(l => {
     if(l.dataset.nav === pageId){ l.classList.add('bg-white','text-[#0F3D2E]'); l.classList.remove('text-white/80'); }
     else { l.classList.remove('bg-white','text-[#0F3D2E]'); l.classList.add('text-white/80'); }
@@ -1034,14 +1025,14 @@ function confirmVerification(){
   pendingVerification = null;
   closeModal('modalVerifikasi');
   currentUser = newUser;
-  showToast('Akun contoh berhasil diaktifkan.');
+  showToast('Akun berhasil diverifikasi dan terdaftar!');
   playWelcomeAnimation();
 }
 
 function playWelcomeAnimation(){
   const overlay = document.getElementById('welcomeOverlay');
   const line = document.getElementById('welcomeLine');
-  const text = 'SELAMAT DATANG DI ANDALLO';
+  const text = 'SELAMAT DATANG ANDALLERS, TEMUKAN JASA YANG KAMU CARI DISINI';
   line.innerHTML = text.split(' ').map((w,i) => `<span style="animation-delay:${0.28 + i*0.07}s">${w}</span>`).join(' ');
   overlay.classList.add('show');
   setTimeout(() => {
@@ -1108,9 +1099,6 @@ function renderCategories(){
 function starString(rating){
   const full = Math.round(rating);
   return '<i class="fa-solid fa-star"></i>'.repeat(full) + '<i class="fa-regular fa-star"></i>'.repeat(5-full);
-}
-function escapeReview(value){
-  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function providerCard(p){
   const selected = compareIds.includes(p.id);
@@ -1233,7 +1221,8 @@ function renderComparisonPage(){
     ['Rating', p => `<span class="text-amber-500">${starString(p.rating)}</span><br><b>${p.rating}/5</b>`],
     ['Jumlah ulasan', p => `${p.reviews.length} ulasan`],
     ['Lokasi', p => `<i class="fa-solid fa-location-dot mr-1 text-[#B45309]"></i>${p.city}`],
-    ['Jarak dari Anda', p => `${providerDistance(p).toFixed(1)} km`]
+    ['Jarak dari Anda', p => `${providerDistance(p).toFixed(1)} km`],
+    ['Area layanan', p => `Radius ${p.radius} km`]
   ];
 
   container.innerHTML = `
@@ -1289,20 +1278,29 @@ function populateFilterOptions(){
   kotaSel.innerHTML = '<option value="">Semua Kota</option>' + kotas.map(k => `<option value="${k}">${k}</option>`).join('');
 }
 function quickSort(type){ filterState.sort = type; document.getElementById('filterSort').value = type; showPage('jasa'); applyFilters(); }
-
+function quickRadius(km){
+  filterState.radius = km;
+  const sel = document.getElementById('filterRadius');
+  if(sel){ sel.value = [...sel.options].some(o => +o.value === km) ? km : '999'; }
+  showToast(`Filter radius ≤${km}km diterapkan.`);
+  showPage('jasa');
+  applyFilters();
+}
 function goToCategory(cat){ showPage('jasa'); document.getElementById('filterKategori').value = cat; filterState.kategori = cat; applyFilters(); }
 
 function applyFilters(){
   filterState.search = document.getElementById('searchInput').value.trim().toLowerCase();
   filterState.kategori = document.getElementById('filterKategori').value;
   filterState.kota = document.getElementById('filterKota').value;
+  filterState.radius = +document.getElementById('filterRadius').value;
   filterState.sort = document.getElementById('filterSort').value;
 
   let list = providers.filter(p => {
     const matchSearch = !filterState.search || p.name.toLowerCase().includes(filterState.search) || p.desc.toLowerCase().includes(filterState.search);
     const matchKategori = !filterState.kategori || p.category === filterState.kategori;
     const matchKota = !filterState.kota || p.city === filterState.kota;
-    return matchSearch && matchKategori && matchKota;
+    const matchRadius = providerDistance(p) <= filterState.radius;
+    return matchSearch && matchKategori && matchKota && matchRadius;
   });
 
   if(filterState.sort === 'distance') list.sort((a,b) => providerDistance(a) - providerDistance(b));
@@ -1351,10 +1349,10 @@ function openProviderDetail(id){
           ${p.reviews.map(r => `
             <div class="border-t border-[#DCE9E2] first:border-t-0 py-4">
               <div class="flex items-center gap-3 mb-2">
-                <div class="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs" style="background:#0F3D2E; color:#FF9B21;">${escapeReview(r.name.charAt(0))}</div>
-                <div><div class="font-bold text-sm" style="color:#0F3D2E;">${escapeReview(r.name)}</div><div class="text-amber-500 text-xs">${starString(r.rating)}</div></div>
+                <div class="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs" style="background:#0F3D2E; color:#FF9B21;">${r.name.charAt(0)}</div>
+                <div><div class="font-bold text-sm" style="color:#0F3D2E;">${r.name}</div><div class="text-amber-500 text-xs">${starString(r.rating)}</div></div>
               </div>
-              <p class="text-sm text-[#3A453D]">"${escapeReview(r.comment)}"</p>
+              <p class="text-sm text-[#3A453D]">"${r.comment}"</p>
             </div>`).join('')}
         </div>
       </div>
@@ -1364,6 +1362,7 @@ function openProviderDetail(id){
           <div class="flex justify-between text-sm py-2 border-b border-dashed border-[#DCE9E2]"><span class="text-[#66716A]">Kategori</span><b>${p.category}</b></div>
           <div class="flex justify-between text-sm py-2 border-b border-dashed border-[#DCE9E2]"><span class="text-[#66716A]">Lokasi</span><b>${p.city}</b></div>
           <div class="flex justify-between text-sm py-2 border-b border-dashed border-[#DCE9E2]"><span class="text-[#66716A]">Jarak dari Anda</span><b>${providerDistance(p).toFixed(1)} km</b></div>
+          <div class="flex justify-between text-sm py-2 border-b border-dashed border-[#DCE9E2]"><span class="text-[#66716A]">Area layanan</span><b>Radius ${p.radius} km</b></div>
           <div class="flex justify-between text-sm py-2 border-b border-dashed border-[#DCE9E2]"><span class="text-[#66716A]">Harga</span><b>Rp${p.priceMin.toLocaleString('id-ID')} - Rp${p.priceMax.toLocaleString('id-ID')}</b></div>
           <div class="flex justify-between text-sm py-2"><span class="text-[#66716A]">Rating</span><b>${p.rating} / 5</b></div>
         </div>
@@ -1387,7 +1386,9 @@ function openBookingModal(providerId){
   document.getElementById('bookingTotalPrice').textContent = 'Rp' + p.priceMin.toLocaleString('id-ID');
   document.getElementById('bookingDate').value = '';
   document.getElementById('bookingTime').value = '';
+  document.getElementById('bookingProof').value = '';
   document.getElementById('bookingFeedback').textContent = '';
+  document.getElementById('bookingProofPreview').classList.remove('show');
   openModal('modalBooking');
 }
 
@@ -1617,7 +1618,7 @@ function submitBantuan(e){
   const msg = document.getElementById('bantuanMsg');
   if(!nama || !deskripsi){ msg.className = 'text-center text-sm font-semibold mt-3 text-red-600'; msg.textContent = 'Nama dan deskripsi wajib diisi.'; return; }
   msg.className = 'text-center text-sm font-semibold mt-3'; msg.style.color = '#236B54';
-  msg.textContent = `Terima kasih, ${nama}. Pratinjau pertanyaanmu selesai; pesan belum dikirim.`;
+  msg.textContent = `Terima kasih, ${nama}! Pesanmu berhasil dikirim. Tim Andallo akan segera merespons.`;
   e.target.reset();
 }
 

@@ -6,14 +6,12 @@ export default {async fetch(request,env){
  const owner=request.headers.get('oai-authenticated-user-id');if(!owner)return json({error:'Silakan masuk melalui ChatGPT.'},401);
  if(!env.BUCKET)return json({error:'Penyimpanan belum tersedia. Coba lagi nanti.'},503);
  if(request.method!=='GET' && request.headers.get('origin')!==url.origin)return json({error:'Permintaan tidak diizinkan.'},403);
- // Roles are explicitly simulated inside each signed-in owner's private MVP workspace.
- const role=request.headers.get('x-demo-role')||'customer',email=request.headers.get('x-demo-email')||'rieke@andallo.com';
- if(!['customer','admin','provider'].includes(role)||email.length>200)return json({error:'Peran demo tidak valid.'},400);
+ const role=request.headers.get('x-andallo-role')||'customer',email=request.headers.get('x-andallo-email')||'customer@example.invalid';
+ if(!['customer','admin','provider'].includes(role)||email.length>200)return json({error:'Peran akun tidak valid.'},400);
  const prefix='owners/'+encodeURIComponent(owner)+'/', key=prefix+'bookings.json';
  const obj=await env.BUCKET.get(key);const bookings=obj?await obj.json():[];
  const canRead=b=>role==='admin'||(role==='customer'&&b.customerEmail===email)||(role==='provider'&&CATALOG.find(p=>p.id===b.providerId)?.email===email);
  const write=async()=>{const result=await env.BUCKET.put(key,JSON.stringify(bookings),{onlyIf:obj?{etagMatches:obj.etag}:{etagDoesNotMatch:'*'},httpMetadata:{contentType:'application/json'}});if(!result)throw Error('Data berubah di sesi lain. Muat ulang lalu coba lagi.');};
- if(path==='/api/reviews'&&request.method==='GET')return json(bookings.filter(b=>b.review).map(b=>({bookingId:b.id,providerId:b.providerId,name:b.review.name||b.customerEmail.split('@')[0],rating:b.review.stars,comment:b.review.text})));
  if(path==='/api/bookings'&&request.method==='GET')return json(bookings.filter(canRead));
  if(path==='/api/bookings'&&request.method==='POST'){
  if(role!=='customer')return json({error:'Hanya pelanggan dapat memesan.'},403);
@@ -23,12 +21,12 @@ export default {async fetch(request,env){
  }
  const match=path.match(/^\/api\/bookings\/(\d+)(?:\/(proof|chat|rating))?$/);if(!match)return json({error:'Tidak ditemukan.'},404);
  const b=bookings.find(b=>b.id===Number(match[1]));
- // Proof links are owner-scoped. The owner can review all demo personas' receipts.
+ // Proof links are owner-scoped so only the signed-in Site owner can review receipts.
  if(!b)return json({error:'Pesanan tidak ditemukan.'},404);
  if(match[2]==='proof'&&request.method==='GET'){if(!b.proof)return json({error:'Bukti belum tersedia.'},404);const file=await env.BUCKET.get(prefix+b.proof.key);if(!file)return json({error:'Bukti tidak ditemukan.'},404);return new Response(file.body,{headers:{'Content-Type':b.proof.type,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Disposition':'inline; filename="bukti-pembayaran.'+(b.proof.type==='image/png'?'png':'jpg')+'"'}});}
  if(!canRead(b))return json({error:'Tidak berhak mengakses pesanan.'},403);
  if(match[2]==='proof'&&request.method==='POST'){
- if(role!=='customer'||b.status!=='AWAITING_PAYMENT')return json({error:'Bukti hanya dapat dikirim setelah pesanan diterima.'},409);
+ if(role!=='customer'||!['PENDING','AWAITING_PAYMENT'].includes(b.status))return json({error:'Bukti transfer untuk pesanan ini sudah diproses.'},409);
  const type=request.headers.get('content-type');if(!['image/png','image/jpeg'].includes(type))return json({error:'Gunakan JPG atau PNG.'},400);
  if(Number(request.headers.get('content-length'))>5*1024*1024)return json({error:'Ukuran maksimal 5 MB.'},413);
  const reader=request.body?.getReader();if(!reader)return json({error:'Pilih berkas.'},400);let chunks=[],size=0;while(true){const {value,done}=await reader.read();if(done)break;size+=value.length;if(size>5*1024*1024){await reader.cancel();return json({error:'Ukuran maksimal 5 MB.'},413);}chunks.push(value);}const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length;}
@@ -36,11 +34,11 @@ export default {async fetch(request,env){
  if((type==='image/png'&&!png)||(type==='image/jpeg'&&!jpg))return json({error:'Isi berkas bukan gambar JPG/PNG yang valid.'},400);
  const proofKey='proofs/'+b.id+'/'+crypto.randomUUID();await env.BUCKET.put(prefix+proofKey,bytes,{httpMetadata:{contentType:type}});const old=b.proof;b.proof={key:proofKey,type,size,uploadedAt:new Date().toISOString()};b.status='PAYMENT_REVIEW';b.rejection=null;try{await write();}catch(e){await env.BUCKET.delete(prefix+proofKey);throw e;}if(old)await env.BUCKET.delete(prefix+old.key);return json(b);
  }
- if(match[2]==='chat'&&request.method==='POST'){const body=await request.json();if(typeof body.text!=='string'||!body.text.trim()||body.text.length>2000)return json({error:'Pesan wajib diisi, maksimal 2000 karakter.'},400);b.chat.push({sender:role==='customer'?'customer':'provider',text:body.text.trim(),time:new Date().toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit'})});if(role==='customer'){const q=body.text.toLowerCase();const reply=q.includes('proses')?'Layanan diproses setelah bukti pembayaran diverifikasi admin.':q.includes('hubungi')?'Penyedia dapat menghubungimu setelah pesanan diterima.':q.includes('bayar')?'Setelah pesanan diterima, buka pesananmu dan unggah bukti pembayaran demo.':'Pesanmu tersimpan. Silakan pantau status pesanan di dashboard.';b.chat.push({sender:'provider',text:'Balasan otomatis (demo): '+reply,time:new Date().toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit'})});}await write();return json(b);}
- if(match[2]==='rating'&&request.method==='POST'){const body=await request.json();if(role!=='customer'||b.status!=='SELESAI'||b.rated||!Number.isInteger(body.stars)||body.stars<1||body.stars>5)return json({error:'Ulasan belum tersedia.'},409);if(typeof body.text!=='string'||!body.text.trim()||body.text.length>2000||typeof body.name!=='string'||!body.name.trim()||body.name.length>80)return json({error:'Isi nama dan ulasan, maksimal 2000 karakter.'},400);b.rated=true;b.review={stars:body.stars,text:body.text.trim(),name:body.name.trim()};await write();return json(b);}
+ if(match[2]==='chat'&&request.method==='POST'){const body=await request.json();if(typeof body.text!=='string'||!body.text.trim()||body.text.length>2000)return json({error:'Pesan wajib diisi, maksimal 2000 karakter.'},400);b.chat.push({sender:role==='customer'?'customer':'provider',text:body.text.trim(),time:new Date().toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit'})});if(role==='customer'){const q=body.text.toLowerCase();const reply=q.includes('proses')?'Layanan diproses setelah mitra menerima pembayaran.':q.includes('hubungi')?'Penyedia akan menghubungimu melalui ruang chat pesanan.':q.includes('bayar')?'Status pembayaran dapat dipantau dari halaman Pesanan Saya.':'Pesanmu sudah diteruskan. Silakan pantau status pesanan di dashboard.';b.chat.push({sender:'provider',text:reply,time:new Date().toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta',hour:'2-digit',minute:'2-digit'})});}await write();return json(b);}
+ if(match[2]==='rating'&&request.method==='POST'){const body=await request.json();if(role!=='customer'||b.status!=='SELESAI'||b.rated||!Number.isInteger(body.stars)||body.stars<1||body.stars>5)return json({error:'Ulasan belum tersedia.'},409);b.rated=true;b.review={stars:body.stars,text:String(body.text||'').slice(0,2000)};await write();return json(b);}
  if(!match[2]&&request.method==='PATCH'){
- const body=await request.json();const allowed={PENDING:['AWAITING_PAYMENT','CANCELLED'],PAYMENT_REVIEW:['DIMULAI','AWAITING_PAYMENT'],DIMULAI:['ON_PROGRESS'],ON_PROGRESS:['SELESAI']};
- if(role==='customer'||!allowed[b.status]?.includes(body.status)||(b.status==='PAYMENT_REVIEW'&&role!=='admin'))return json({error:'Perubahan status tidak diizinkan. Ikuti urutan pembayaran.'},409);
+ const body=await request.json();const allowed={PENDING:['CANCELLED'],AWAITING_PAYMENT:['CANCELLED'],PAYMENT_REVIEW:['DITERIMA','AWAITING_PAYMENT'],DITERIMA:['ON_PROGRESS'],DIMULAI:['ON_PROGRESS'],ON_PROGRESS:['SELESAI']};
+ if(role==='customer'||!allowed[b.status]?.includes(body.status))return json({error:'Perubahan status tidak diizinkan. Ikuti urutan pembayaran.'},409);
  if(b.status==='PAYMENT_REVIEW'&&!b.proof)return json({error:'Bukti pembayaran belum tersedia.'},409);
  if(b.status==='PAYMENT_REVIEW'&&body.status==='AWAITING_PAYMENT'){if(typeof body.rejection!=='string'||!body.rejection.trim()||body.rejection.length>500)return json({error:'Isi alasan penolakan, maksimal 500 karakter.'},400);b.rejection=body.rejection.trim();}
  b.status=body.status;await write();return json(b);
