@@ -1,0 +1,1644 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Andallo — Temukan dan Pesan Jasa</title>
+
+<!-- ===================== CDN: TAILWIND ===================== -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- ===================== CDN: FONT AWESOME ===================== -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<!-- ===================== FONTS ===================== -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  html{scroll-behavior:smooth;}
+  body{font-family:'Inter',sans-serif; background:#F5FAF8; color:#1C2620;}
+  h1,h2,h3,h4,.font-head{font-family:'Plus Jakarta Sans',sans-serif;}
+  ::-webkit-scrollbar{width:8px; height:8px;}
+  ::-webkit-scrollbar-thumb{background:#c9c2ac; border-radius:8px;}
+
+  .page{display:none;}
+  .page.active{display:block; animation:fadeInPage .35s ease;}
+  @keyframes fadeInPage{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;}}
+
+  .modal-overlay{position:fixed; inset:0; background:rgba(15,61,46,.55); backdrop-filter:blur(2px); display:none; align-items:center; justify-content:center; z-index:500; padding:16px;}
+  .modal-overlay.open{display:flex;}
+  .modal-box{animation:modalIn .25s ease;}
+  @keyframes modalIn{from{opacity:0; transform:translateY(14px) scale(.98);} to{opacity:1; transform:none;}}
+
+  .welcome-overlay{position:fixed; inset:0; background:#0F3D2E; z-index:900; display:none; align-items:center; justify-content:center; text-align:center; padding:30px;}
+  .welcome-overlay.show{display:flex;}
+  .welcome-mark{opacity:0; transform:scale(.6);}
+  .welcome-overlay.show .welcome-mark{animation:markIn .5s ease forwards .05s;}
+  @keyframes markIn{to{opacity:1; transform:scale(1);}}
+  .welcome-line span{display:inline-block; opacity:0; transform:translateY(16px);}
+  .welcome-overlay.show .welcome-line span{animation:wordIn .55s ease forwards;}
+  @keyframes wordIn{to{opacity:1; transform:none;}}
+
+  .carousel-track{display:flex; transition:transform .55s cubic-bezier(.65,0,.35,1);}
+  .carousel-slide{min-width:100%;}
+
+  .toast{position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px); z-index:1000; opacity:0; pointer-events:none; transition:all .3s ease;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  .star-btn{transition:transform .12s ease, color .12s ease;}
+  .star-btn:hover{transform:scale(1.15);}
+
+  .chat-bubble-in{background:#EAF5F0;}
+  .chat-bubble-out{background:#1B4D3E; color:#fff;}
+
+  .compare-dock{position:fixed; left:50%; bottom:18px; transform:translateX(-50%) translateY(130%); width:min(760px,calc(100% - 28px)); z-index:450; opacity:0; pointer-events:none; transition:.28s ease; background:#0F3D2E; color:#fff; border:1px solid rgba(255,255,255,.13); border-radius:20px; box-shadow:0 22px 55px rgba(15,61,46,.3);}
+  .compare-dock.show{transform:translateX(-50%) translateY(0); opacity:1; pointer-events:auto;}
+  .compare-avatar{width:34px; height:34px; border-radius:10px; display:grid; place-items:center; margin-left:-7px; border:2px solid #0F3D2E; background:#FF9B21; color:#0F3D2E; font-size:10px; font-weight:800;}
+  .compare-table th,.compare-table td{min-width:190px; vertical-align:top;}
+  .compare-table th:first-child,.compare-table td:first-child{position:sticky; left:0; z-index:2; min-width:155px; background:#fff;}
+  .compare-table thead th:first-child{z-index:3; background:#EAF5F0;}
+  .compare-selected{border-color:#FF9B21 !important; box-shadow:0 0 0 2px rgba(212,162,76,.2);}
+
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms !important; transition-duration:.001ms !important;} }
+</style>
+<link rel="stylesheet" href="/theme.css"><link rel="icon" type="image/png" href="/assets/andallo-logo.png"><meta name="description" content="Cari penyedia jasa, bandingkan pilihan, dan pesan dengan mudah melalui Andallo."></head>
+<body class="min-h-screen home-active">
+
+<!-- =========================================================================================
+     NAVBAR
+========================================================================================= -->
+<nav class="andallo-navbar sticky top-0 z-40">
+  <div class="nav-main max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex items-center justify-between h-[70px] gap-4">
+
+      <!-- Logo -->
+      <a href="#" onclick="showPage('beranda'); return false;" class="brand-link flex items-center gap-2 font-head font-extrabold text-xl shrink-0">
+        <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="brand-logo">
+        Andallo
+      </a>
+
+      <div class="nav-utility hidden xl:flex items-center gap-1">
+        <button onclick="showPage('bantuan')"><i class="fa-regular fa-circle-question"></i> Bantuan</button>
+        <button onclick="currentUser ? goToDashboard() : openModal('modalMasuk')"><i class="fa-regular fa-clipboard"></i> Pesanan</button>
+      </div>
+
+      <!-- Auth Area -->
+      <div id="navAuthArea" class="flex items-center gap-2"></div>
+
+      <!-- Hamburger (mobile) -->
+      <button onclick="toggleMobileMenu()" class="menu-toggle lg:hidden p-2" aria-label="Buka menu">
+        <i class="fa-solid fa-bars text-xl"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="nav-products hidden lg:block">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center gap-1">
+      <a href="#" onclick="showPage('beranda'); return false;" class="nav-link" data-nav="beranda"><i class="fa-solid fa-house"></i> Beranda</a>
+      <a href="#" onclick="goToCategory('Cukur Pria'); return false;" class="product-link"><i class="fa-solid fa-scissors"></i> Perawatan</a>
+      <a href="#" onclick="goToCategory('Cleaning Service'); return false;" class="product-link"><i class="fa-solid fa-broom"></i> Kebersihan</a>
+      <a href="#" onclick="goToCategory('Teknisi AC & Elektronik'); return false;" class="product-link"><i class="fa-solid fa-screwdriver-wrench"></i> Teknisi</a>
+      <a href="#" onclick="goToCategory('Fotografer'); return false;" class="product-link"><i class="fa-solid fa-camera"></i> Kreatif</a>
+      <a href="#" onclick="showPage('jasa'); return false;" class="nav-link" data-nav="jasa"><i class="fa-solid fa-grip"></i> Semua Jasa</a>
+      <a href="#" onclick="showPage('bandingkan'); return false;" class="nav-link" data-nav="bandingkan"><i class="fa-solid fa-scale-balanced"></i> Bandingkan <span id="navCompareCount" class="hidden min-w-5 h-5 px-1 rounded-full items-center justify-center text-[10px]">0</span></a>
+    </div>
+  </div>
+
+  <!-- Mobile Menu -->
+  <div id="mobileMenu" class="hidden lg:hidden flex-col px-4 pb-4 gap-1">
+    <a href="#" onclick="showPage('beranda'); toggleMobileMenu(); return false;"><i class="fa-solid fa-house"></i> Beranda</a>
+    <a href="#" onclick="showPage('jasa'); toggleMobileMenu(); return false;"><i class="fa-solid fa-grip"></i> Semua Jasa</a>
+    <a href="#" onclick="showPage('bandingkan'); toggleMobileMenu(); return false;" class="flex items-center justify-between"><span><i class="fa-solid fa-scale-balanced"></i> Bandingkan</span><span id="mobileCompareCount" class="hidden min-w-6 h-6 px-1 rounded-full items-center justify-center text-[10px]">0</span></a>
+    <a href="#" onclick="showPage('bantuan'); toggleMobileMenu(); return false;"><i class="fa-regular fa-circle-question"></i> Bantuan</a>
+  </div>
+</nav>
+
+<!-- =========================================================================================
+     PAGE: BERANDA
+========================================================================================= -->
+<section id="page-beranda" class="page active">
+
+<div class="service-hero">
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <span class="hero-eyebrow">LAYANAN TERPERCAYA DI SEKITARMU</span>
+      <h1>Butuh bantuan apa<br>hari ini?</h1>
+      <p>Cari penyedia sesuai kebutuhan, lihat detailnya, dan ajukan pesanan.</p>
+    </div>
+    <div class="service-booking-card">
+      <form class="hero-search-panel" onsubmit="heroSearch(event)">
+        <label class="hero-field hero-field-main">
+          <span>Jasa yang kamu cari</span>
+          <div><i class="fa-solid fa-magnifying-glass"></i><input id="heroSearchInput" type="search" placeholder="Contoh: servis AC atau fotografer" aria-label="Jasa yang kamu cari"></div>
+        </label>
+        <label class="hero-field">
+          <span>Lokasi layanan</span>
+          <div><i class="fa-solid fa-location-dot"></i><select id="heroCityInput" aria-label="Lokasi layanan"><option value="">Semua lokasi</option><option>Tangerang</option><option>Jakarta</option><option>Bekasi</option><option>Depok</option><option>Bandung</option><option>Surabaya</option><option>Yogyakarta</option></select></div>
+        </label>
+        <button type="submit" class="hero-search-button">Cari Jasa</button>
+      </form>
+    </div>
+  </div>
+</div>
+<div class="benefit-strip"><span><i class="fa-solid fa-scale-balanced"></i> Bandingkan harga dengan mudah</span><span><i class="fa-solid fa-location-dot"></i> Pilihan jasa di sekitarmu</span><span><i class="fa-solid fa-receipt"></i> Status pembayaran transparan</span></div><span id="statProviders" hidden></span>
+  <div class="category-section">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-end justify-between gap-4 mb-5">
+        <div><h2 class="font-head font-extrabold text-2xl">Kategori Pilihan</h2><p class="text-sm text-[#66716A] mt-1">Pilih layanan yang paling kamu butuhkan.</p></div>
+        <button onclick="showPage('jasa')" class="text-sm font-bold text-sky-700">Lihat semua</button>
+      </div>
+      <div id="categoryGrid" class="category-tabs"></div>
+    </div>
+  </div>
+  <!-- Penyedia Pilihan -->
+  <div class="py-14" style="background:#EAF5F0;">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-wrap justify-between items-end gap-4 mb-8">
+        <div>
+          <h2 class="font-head font-extrabold text-2xl md:text-3xl" style="color:#0F3D2E;">Penyedia Jasa Pilihan</h2>
+          <p class="text-[#66716A] text-sm mt-1">Pilihan penyedia dari katalog Andallo. Harga dan jarak bersifat perkiraan.</p>
+        </div>
+        <button onclick="showPage('jasa')" class="px-5 py-2.5 rounded-full font-bold text-sm border border-[#DCE9E2] bg-white hover:bg-[#F5FAF8] transition">Jelajahi Semua</button>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6" id="homeProviderGrid"></div>
+    </div>
+  </div>
+
+  <!-- Testimoni -->
+  <div class="py-14">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="mb-8">
+        <h2 class="font-head font-extrabold text-2xl md:text-3xl" style="color:#0F3D2E;">Apa kata Andallers?</h2>
+        <p class="text-[#66716A] text-sm mt-1">Contoh ulasan dari katalog layanan Andallo.</p>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6" id="testimonialGrid"></div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================================================
+     PAGE: JASA (LIST & FILTER)
+========================================================================================= -->
+<section id="page-jasa" class="page">
+  <div class="pb-24" style="background:#1B4D3E;">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-6">
+      <h1 class="font-head font-extrabold text-2xl md:text-3xl text-white mb-2">Jelajahi Jasa</h1>
+      <p class="text-white/75 text-sm">Temukan penyedia jasa terdekat sesuai kebutuhan, harga, dan lokasimu.</p>
+    </div>
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="bg-white rounded-3xl shadow-xl p-4 grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap gap-3 lg:items-center">
+        <div class="sm:col-span-2 lg:flex-1 lg:min-w-[220px] flex items-center gap-2 rounded-xl px-4 py-3" style="background:#EAF5F0;">
+          <i class="fa-solid fa-magnifying-glass text-[#66716A]"></i>
+          <input id="searchInput" type="text" placeholder="Cari nama jasa atau deskripsi..." oninput="applyFilters()" class="bg-transparent outline-none w-full text-sm">
+        </div>
+        <button id="locationButton" onclick="detectUserLocation()" class="w-full lg:w-auto rounded-xl px-4 py-3 text-sm font-bold text-white whitespace-nowrap" style="background:#236B54;"><i class="fa-solid fa-location-crosshairs mr-1"></i> Gunakan Lokasi</button>
+        <select id="filterKategori" onchange="applyFilters()" class="w-full lg:w-auto rounded-xl px-4 py-3 text-sm font-medium border border-[#DCE9E2]">
+          <option value="">Semua Kategori</option>
+        </select>
+        <select id="filterKota" onchange="applyFilters()" class="w-full lg:w-auto rounded-xl px-4 py-3 text-sm font-medium border border-[#DCE9E2]">
+          <option value="">Semua Kota</option>
+        </select>
+        <select id="filterSort" onchange="applyFilters()" class="sm:col-span-2 lg:col-span-1 w-full lg:w-auto rounded-xl px-4 py-3 text-sm font-medium border border-[#DCE9E2]">
+          <option value="rekomendasi">Urutkan: Rekomendasi</option>
+          <option value="distance">Jarak Terdekat</option>
+          <option value="harga-asc">Harga: Termurah</option>
+          <option value="harga-desc">Harga: Termahal</option>
+          <option value="rating">Rating Tertinggi</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-6">
+      <span class="text-sm text-[#66716A]" id="resultCount"></span>
+      <span class="text-xs font-semibold px-3 py-2 rounded-full" style="color:#1B4D3E; background:#EAF5F0;"><i class="fa-solid fa-location-dot mr-1"></i><span id="activeLocationLabel">Acuan lokasi: Tangerang</span></span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 sm:gap-6" id="jasaGrid"></div>
+  </div>
+</section>
+
+<!-- =========================================================================================
+     PAGE: BANDINGKAN HARGA
+========================================================================================= -->
+<section id="page-bandingkan" class="page">
+  <div class="py-12" style="background:#1B4D3E;">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap items-end justify-between gap-5">
+      <div>
+        <span class="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider mb-3" style="color:#FF9B21;"><i class="fa-solid fa-scale-balanced"></i> Perbandingan transparan</span>
+        <h1 class="font-head font-extrabold text-3xl md:text-4xl text-white mb-2">Bandingkan Harga Jasa</h1>
+        <p class="text-white/70 text-sm max-w-2xl">Lihat harga minimum, rentang biaya, rating, lokasi, dan jangkauan hingga tiga penyedia dalam kategori yang sama.</p>
+      </div>
+      <button onclick="clearComparison()" class="px-5 py-2.5 rounded-full border border-white/20 text-white text-sm font-bold hover:bg-white/10 transition"><i class="fa-solid fa-trash-can mr-1"></i> Kosongkan</button>
+    </div>
+  </div>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10" id="comparisonContent"></div>
+</section>
+
+<!-- =========================================================================================
+     PAGE: DETAIL JASA
+========================================================================================= -->
+<section id="page-detail" class="page">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <a href="#" onclick="showPage('jasa'); return false;" class="inline-flex items-center gap-2 font-semibold text-sm mb-6" style="color:#1B4D3E;"><i class="fa-solid fa-arrow-left"></i> Kembali ke daftar jasa</a>
+    <div id="detailContent"></div>
+  </div>
+</section>
+
+<!-- =========================================================================================
+     PAGE: CHAT (SIMULASI REALTIME)
+========================================================================================= -->
+<section id="page-chat" class="page">
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <a href="#" onclick="showPage(currentUser && currentUser.role==='customer' ? 'dashboard-customer' : 'dashboard-admin'); return false;" class="inline-flex items-center gap-2 font-semibold text-sm mb-6" style="color:#1B4D3E;"><i class="fa-solid fa-arrow-left"></i> Kembali</a>
+    <div class="bg-white rounded-3xl shadow-xl overflow-hidden border border-[#DCE9E2]">
+      <div class="p-5 flex items-center gap-3 text-white" style="background:#0F3D2E;" id="chatHeader"></div>
+      <div id="chatMessages" class="p-5 flex flex-col gap-3 h-[420px] overflow-y-auto"></div>
+      <form onsubmit="sendChatMessage(event)" class="flex gap-2 p-4 border-t border-[#DCE9E2]">
+        <input id="chatInput" type="text" placeholder="Tulis pesan..." class="flex-1 rounded-full px-4 py-3 text-sm border border-[#DCE9E2] outline-none" required>
+        <button type="submit" class="w-12 h-12 rounded-full text-white flex items-center justify-center" style="background:#FF9B21; color:#0F3D2E;"><i class="fa-solid fa-paper-plane"></i></button>
+      </form>
+    </div>
+    <p class="text-xs text-[#66716A] text-center mt-4"><i class="fa-solid fa-circle-info"></i> Gunakan ruang chat untuk mengonfirmasi jadwal dan detail layanan dengan penyedia.</p>
+  </div>
+</section>
+
+<!-- =========================================================================================
+     PAGE: DASHBOARD CUSTOMER
+========================================================================================= -->
+<section id="page-dashboard-customer" class="page">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <h1 class="font-head font-extrabold text-2xl md:text-3xl mb-2" style="color:#0F3D2E;">Riwayat Pesanan Saya</h1>
+    <p class="text-[#66716A] text-sm mb-8">Pantau status pesananmu dan beri rating setelah jasa selesai dikerjakan.</p>
+    <div class="grid gap-4" id="customerBookingList"></div>
+  </div>
+</section>
+
+<!-- =========================================================================================
+     PAGE: DASHBOARD MITRA
+========================================================================================= -->
+<section id="page-dashboard-admin" class="page">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+    <h1 class="font-head font-extrabold text-2xl md:text-3xl mb-2" style="color:#0F3D2E;" id="adminDashTitle">Dashboard Mitra</h1>
+    <p class="text-[#66716A] text-sm mb-8" id="adminDashSub">Tinjau pesanan masuk, bukti transfer, dan status layanan.</p>
+    <div class="bg-white rounded-2xl shadow-lg border border-[#DCE9E2] overflow-x-auto">
+      <table class="w-full text-sm min-w-[720px]">
+        <thead>
+          <tr class="text-left text-xs uppercase tracking-wide text-[#66716A] border-b border-[#DCE9E2]">
+            <th class="py-4 px-5">Pelanggan</th>
+            <th class="py-4 px-5">Jasa</th>
+            <th class="py-4 px-5">Jadwal</th>
+            <th class="py-4 px-5">Total</th>
+            <th class="py-4 px-5">Bukti Transfer</th>
+            <th class="py-4 px-5">Status</th>
+            <th class="py-4 px-5">Aksi</th>
+          </tr>
+        </thead>
+        <tbody id="adminBookingTable"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================================================
+     PAGE: BANTUAN
+========================================================================================= -->
+<section id="page-bantuan" class="page">
+  <div class="text-center py-14" style="background:#1B4D3E;">
+    <div class="max-w-2xl mx-auto px-4">
+      <h1 class="font-head font-extrabold text-3xl text-white mb-3">Pusat Bantuan Andallo</h1>
+      <p class="text-white/75 text-sm">Ada kendala, pertanyaan, atau masukan? Tim kami siap membantumu.</p>
+    </div>
+  </div>
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-14 grid md:grid-cols-2 gap-10 items-start">
+    <div class="bg-white rounded-3xl shadow-lg border border-[#DCE9E2] p-8">
+      <h2 class="font-head font-bold text-xl text-center mb-1" style="color:#0F3D2E;">Kirim Pesan Bantuan</h2>
+      <p class="text-center text-sm text-[#66716A] mb-6">Tulis pertanyaanmu untuk melihat pratinjau. Pengiriman pesan belum tersedia.</p>
+      <form onsubmit="submitBantuan(event)">
+        <div class="mb-4">
+          <label class="block text-xs font-bold text-[#3A453D] mb-2">Nama</label>
+          <input id="bantuanNama" type="text" required placeholder="Nama lengkap kamu" class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54]" style="background:#F5FAF8;">
+        </div>
+        <div class="mb-4">
+          <label class="block text-xs font-bold text-[#3A453D] mb-2">Deskripsi Pertanyaan</label>
+          <textarea id="bantuanDeskripsi" required placeholder="Ceritakan kendala atau pertanyaanmu di sini..." class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54] min-h-[120px]" style="background:#F5FAF8;"></textarea>
+        </div>
+        <div class="flex justify-center mt-6">
+          <button type="submit" class="px-8 py-3 rounded-full font-bold text-sm text-white hover:-translate-y-0.5 transition" style="background:#1B4D3E;">Kirim</button>
+        </div>
+        <div id="bantuanMsg" class="text-center text-sm font-semibold mt-3"></div>
+      </form>
+    </div>
+    <div>
+      <h3 class="font-head font-bold text-lg mb-4" style="color:#0F3D2E;">Pertanyaan yang Sering Diajukan</h3>
+      <div id="faqList" class="flex flex-col gap-3"></div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================================================
+     FOOTER
+========================================================================================= -->
+<footer class="pt-14 pb-8" style="background:#0F3D2E; color:rgba(255,255,255,.78);">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8 pb-9 border-b border-white/10">
+      <div>
+        <div class="flex items-center gap-2 font-head font-extrabold text-lg text-white mb-3">
+          <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="footer-logo"> Andallo
+        </div>
+        <p class="text-sm text-white/65 max-w-xs mb-4">Temukan jasa untuk kebutuhan sehari-hari dengan harga dan pilihan layanan yang jelas.</p>
+      </div>
+      <div>
+        <h4 class="text-white font-head font-bold text-sm mb-4">Navigasi</h4>
+        <button onclick="showPage('beranda')" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Beranda</button>
+        <button onclick="showPage('jasa')" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Cari Jasa</button>
+        <button onclick="showPage('bandingkan')" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Bandingkan Jasa</button>
+      </div>
+      <div>
+        <h4 class="text-white font-head font-bold text-sm mb-4">Bantuan</h4>
+        <button onclick="showPage('bantuan')" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Pusat Bantuan</button>
+        <button onclick="footerHelp(0)" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Cara Memesan</button>
+        <button onclick="footerHelp(1)" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Pembayaran</button>
+        <button onclick="footerHelp(5)" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Privasi Data</button>
+        <button onclick="footerHelp(6)" class="block text-sm text-white/72 hover:text-cyan-300 mb-3">Ketentuan Penggunaan</button>
+      </div>
+    </div>
+    <div class="flex flex-wrap justify-between gap-3 pt-6 text-xs text-white/55">
+      <span>© 2026 Andallo. Semua hak dilindungi.</span>
+      <span>Layanan jasa dalam satu tempat.</span>
+    </div>
+  </div>
+</footer>
+
+<!-- =========================================================================================
+     FLOATING: PILIHAN BANDINGKAN
+========================================================================================= -->
+<div id="compareDock" class="compare-dock">
+  <div class="p-3 sm:p-4 flex items-center gap-3 sm:gap-5">
+    <div class="min-w-0 flex-1">
+      <b class="font-head text-sm block"><span id="compareDockCount">0</span>/3 penyedia dipilih</b>
+      <span class="text-[10px] text-white/60 hidden sm:block">Pilih minimal dua penyedia dari kategori yang sama.</span>
+    </div>
+    <div id="compareDockAvatars" class="hidden sm:flex pl-2"></div>
+    <button onclick="clearComparison()" class="w-9 h-9 rounded-full border border-white/15 text-white/70 hover:bg-white/10" aria-label="Kosongkan perbandingan"><i class="fa-solid fa-xmark"></i></button>
+    <button onclick="openComparison()" class="px-4 sm:px-5 py-3 rounded-full font-bold text-xs text-[#0F3D2E] whitespace-nowrap" style="background:#FF9B21;">Bandingkan harga</button>
+  </div>
+</div>
+
+<!-- =========================================================================================
+     MODAL: MASUK
+========================================================================================= -->
+<div class="modal-overlay" id="modalMasuk">
+  <div class="modal-box bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative max-h-[90vh] overflow-y-auto">
+    <button onclick="closeModal('modalMasuk')" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#EAF5F0]"><i class="fa-solid fa-xmark"></i></button>
+    <div class="text-center mb-6">
+      <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="w-14 h-14 mx-auto mb-3 brand-tile">
+      <h2 class="font-head font-bold text-xl" style="color:#0F3D2E;">Masuk ke Andallo</h2>
+      <p class="text-sm text-[#66716A]">Selamat datang kembali, Andallers!</p>
+    </div>
+    <form id="loginForm" onsubmit="handleLoginSubmit(event)">
+      <div class="mb-4">
+        <label class="block text-xs font-bold text-[#3A453D] mb-2">Email</label>
+        <input id="loginEmail" type="email" required placeholder="nama@email.com" class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54]">
+      </div>
+      <div class="mb-2">
+        <label class="block text-xs font-bold text-[#3A453D] mb-2">Kata Sandi</label>
+        <input id="loginPassword" type="password" required placeholder="Masukkan kata sandi" class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54]">
+      </div>
+      <div id="loginMsg" class="text-sm font-semibold mb-2" style="color:#B23B3B;"></div>
+      <button type="submit" class="w-full mt-2 py-3.5 rounded-full font-bold text-sm text-white hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-900/50 transition" style="background:#1B4D3E;">Masuk</button>
+    </form>
+    <div class="text-center text-sm text-[#66716A] mt-5">Belum punya akun? <button onclick="switchModal('modalMasuk','modalDaftar')" class="font-bold" style="color:#1B4D3E;">Daftar di sini</button></div>
+  </div>
+</div>
+
+<!-- =========================================================================================
+     MODAL: DAFTAR
+========================================================================================= -->
+<div class="modal-overlay" id="modalDaftar">
+  <div class="modal-box bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative max-h-[90vh] overflow-y-auto">
+    <button onclick="closeModal('modalDaftar')" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#EAF5F0]"><i class="fa-solid fa-xmark"></i></button>
+    <div class="text-center mb-6">
+      <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="w-14 h-14 mx-auto mb-3 brand-tile">
+      <h2 class="font-head font-bold text-xl" style="color:#0F3D2E;">Daftar Akun Baru</h2>
+      <p class="text-sm text-[#66716A]">Gabung jadi Andallers dan temukan jasa terbaik.</p>
+    </div>
+    <form id="registerForm" onsubmit="handleRegisterSubmit(event)">
+      <div class="mb-4">
+        <label class="block text-xs font-bold text-[#3A453D] mb-2">Nama Pengguna</label>
+        <input id="regNama" type="text" required placeholder="Nama kamu" class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54]">
+      </div>
+      <div class="mb-4">
+        <label class="block text-xs font-bold text-[#3A453D] mb-2">Email (dipakai sebagai kunci akun)</label>
+        <input id="regEmail" type="email" required placeholder="nama@email.com" class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54]">
+      </div>
+      <div class="mb-2">
+        <label class="block text-xs font-bold text-[#3A453D] mb-2">Kata Sandi</label>
+        <input id="regPassword" type="password" required placeholder="Minimal 6 karakter" class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54]">
+      </div>
+      <div id="registerMsg" class="text-sm font-semibold mb-2" style="color:#B23B3B;"></div>
+      <button type="submit" class="w-full mt-2 py-3.5 rounded-full font-bold text-sm text-white hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-900/50 transition" style="background:#1B4D3E;">Daftar</button>
+    </form>
+    <div class="text-center text-sm text-[#66716A] mt-5">Sudah punya akun? <button onclick="switchModal('modalDaftar','modalMasuk')" class="font-bold" style="color:#1B4D3E;">Masuk di sini</button></div>
+  </div>
+</div>
+
+<!-- =========================================================================================
+     MODAL: VERIFIKASI EMAIL (SIMULASI)
+========================================================================================= -->
+<div class="modal-overlay" id="modalVerifikasi">
+  <div class="modal-box bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
+    <button onclick="closeModal('modalVerifikasi')" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#EAF5F0]"><i class="fa-solid fa-xmark"></i></button>
+    <div class="text-center mb-6">
+      <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="w-14 h-14 mx-auto mb-3 brand-tile">
+      <h2 class="font-head font-bold text-xl" style="color:#0F3D2E;">Aktivasi Akun Contoh</h2>
+      <p class="text-sm text-[#66716A]">Aktifkan akun contoh untuk <b id="verifEmailTarget"></b></p>
+    </div>
+    <div class="rounded-2xl p-5 border-2 border-dashed" style="background:#EAF5F0; border-color:#B45309;">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background:#FF9B21;"><i class="fa-solid fa-envelope text-[#0F3D2E]"></i></div>
+        <div><b class="block text-sm" style="color:#0F3D2E;">Konfirmasi Pendaftaran</b><span class="text-xs text-[#66716A]">Lanjutkan dengan akun contoh</span></div>
+      </div>
+      <p class="text-sm mb-4">Halo, terima kasih telah mendaftar di Andallo! Klik tombol di bawah untuk mengaktifkan akun contoh.</p>
+      <button onclick="confirmVerification()" class="w-full py-3 rounded-full font-bold text-sm text-[#0F3D2E]" style="background:#FF9B21;">Aktifkan Akun</button>
+    </div>
+  </div>
+</div>
+
+<!-- =========================================================================================
+     MODAL: BOOKING
+========================================================================================= -->
+<div class="modal-overlay" id="modalBooking">
+  <div class="modal-box bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
+    <button onclick="closeModal('modalBooking')" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#EAF5F0]"><i class="fa-solid fa-xmark"></i></button>
+    <h2 class="font-head font-bold text-xl mb-1" style="color:#0F3D2E;">Ajukan Pesanan Jasa</h2>
+    <p class="text-sm text-[#66716A] mb-6" id="bookingProviderName"></p>
+    <form onsubmit="handleBookingSubmit(event)">
+      <div class="mb-4">
+        <label class="block text-xs font-bold text-[#3A453D] mb-2">Tanggal</label>
+        <input id="bookingDate" type="date" required class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54]">
+      </div>
+      <div class="mb-4">
+        <label class="block text-xs font-bold text-[#3A453D] mb-2">Jam</label>
+        <input id="bookingTime" type="time" required class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54]">
+      </div>
+      <div class="rounded-xl p-4 flex justify-between items-center mb-6" style="background:#EAF5F0;">
+        <span class="text-sm font-semibold text-[#3A453D]">Total Harga (mulai dari)</span>
+        <span class="font-head font-extrabold text-lg" id="bookingTotalPrice" style="color:#1B4D3E;">Rp0</span>
+      </div>
+      <p id="bookingFeedback" class="text-sm text-sky-800 mb-3" role="status"></p>
+      <button type="submit" class="w-full py-3.5 rounded-full font-bold text-sm text-[#0F3D2E] hover:-translate-y-0.5 transition" style="background:#FF9B21;">Kirim Permintaan Booking</button>
+    </form>
+  </div>
+</div>
+
+<!-- =========================================================================================
+     MODAL: RATING
+========================================================================================= -->
+<div class="modal-overlay" id="modalRating">
+  <div class="modal-box bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative">
+    <button onclick="closeModal('modalRating')" class="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center hover:bg-[#EAF5F0]"><i class="fa-solid fa-xmark"></i></button>
+    <h2 class="font-head font-bold text-xl mb-1 text-center" style="color:#0F3D2E;">Beri Rating & Ulasan</h2>
+    <p class="text-sm text-[#66716A] mb-6 text-center" id="ratingProviderName"></p>
+    <div class="flex justify-center gap-2 mb-6" id="starPicker"></div>
+    <form onsubmit="submitRating(event)">
+      <textarea id="ratingUlasan" required placeholder="Ceritakan pengalamanmu memakai jasa ini..." class="w-full rounded-xl border border-[#DCE9E2] px-4 py-3 text-sm outline-none focus:border-[#236B54] min-h-[100px] mb-5" style="background:#F5FAF8;"></textarea>
+      <button type="submit" class="w-full py-3.5 rounded-full font-bold text-sm text-white hover:-translate-y-0.5 transition" style="background:#1B4D3E;">Kirim Ulasan</button>
+    </form>
+  </div>
+</div>
+
+<!-- =========================================================================================
+     WELCOME ANIMATION OVERLAY
+========================================================================================= -->
+<div class="welcome-overlay" id="welcomeOverlay">
+  <div class="max-w-2xl">
+    <img src="/assets/andallo-logo.png" alt="Logo Andallo" class="welcome-mark w-16 h-16 mx-auto mb-7 brand-tile">
+    <div class="welcome-line font-head font-extrabold text-white leading-snug" style="font-size:clamp(22px,4.4vw,40px);" id="welcomeLine"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <div class="flex items-center gap-3 px-5 py-3.5 rounded-xl text-white text-sm font-semibold shadow-2xl" style="background:#0F3D2E;">
+    <span class="w-2 h-2 rounded-full" style="background:#FF9B21;"></span>
+    <span id="toastText"></span>
+  </div>
+</div>
+
+<script>
+/* =========================================================================================
+   ANDALLO — SPA LOGIC (Vanilla JS)
+   Semua data di bawah ini adalah DUMMY DATA, disimpan in-memory (variabel JS),
+   Katalog dan akun adalah demo; pesanan, chat, dan bukti pembayaran disimpan oleh API.
+========================================================================================= */
+
+/* ---------------------------------------------------------------------------------------
+   1. DUMMY DATA
+--------------------------------------------------------------------------------------- */
+let users = [
+  { email:'rieke@andallo.com', password:'demo123', name:'Rieke Setiawati', role:'customer', verified:true },
+  { email:'barber@andallo.com', password:'demo123', name:'Barber Master Cut', role:'provider', verified:true },
+  { email:'admin@andallo.com', password:'demo123', name:'Admin Main System', role:'admin', verified:true }
+];
+
+let pendingVerification = null; // {nama,email,password} menunggu "verifikasi email"
+let currentUser = null;
+
+const categories = [
+  {name:'Cukur Pria', icon:'fa-scissors'},
+  {name:'Fotografer', icon:'fa-camera'},
+  {name:'Cleaning Service', icon:'fa-broom'},
+  {name:'Teknisi AC & Elektronik', icon:'fa-plug'}
+];
+
+let providers = [
+  /* ===== CUKUR PRIA (contoh penyedia jasa) ===== */
+  {
+    id:1, name:'Bara Barbershop', category:'Cukur Pria', city:'Jakarta',
+    priceMin:50000, priceMax:85000, rating:4.9, providerEmail:'barber@andallo.com',
+    photo:'',
+    portfolio:[],
+    desc:'Bara Barbershop menghadirkan potongan rambut pria modern dengan barber berpengalaman lebih dari 8 tahun. Melayani panggilan ke rumah maupun booking langsung di tempat.',
+    reviews:[
+      {name:'Dimas P.', rating:5, comment:'Potongannya rapi banget, bisa dipanggil ke rumah juga. Recommended!'},
+      {name:'Fajar S.', rating:4.8, comment:'Barbernya ramah dan tepat waktu, hasil sesuai request.'}
+    ]
+  },
+  {
+    id:5, name:"Gentleman's Cut Studio", category:'Cukur Pria', city:'Jakarta Selatan',
+    priceMin:65000, priceMax:120000, rating:4.7, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:"Gentleman's Cut Studio menawarkan gaya potong klasik hingga modern dengan konsultasi personal sebelum pengerjaan. Ruang tunggu nyaman dengan barber bersertifikat internasional.",
+    reviews:[
+      {name:'Andra W.', rating:4.8, comment:'Suka gaya klasiknya, barbernya detail banget sama garis rambut.'},
+      {name:'Yusuf K.', rating:4.6, comment:'Tempatnya nyaman, hasil potong rapi dan tahan lama.'}
+    ]
+  },
+  {
+    id:6, name:'Kilau Barbershop Express', category:'Cukur Pria', city:'Depok',
+    priceMin:35000, priceMax:60000, rating:4.5, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Kilau Barbershop Express fokus pada layanan cepat dan terjangkau untuk potong rambut harian tanpa mengurangi kerapian hasil akhir. Cocok untuk yang sibuk dan ingin tampil segar.',
+    reviews:[
+      {name:'Reza A.', rating:4.5, comment:'Cepat dan murah, cocok buat potong rutin bulanan.'},
+      {name:'Bimo S.', rating:4.4, comment:'Antrean cepat, hasil rapi sesuai model yang diminta.'}
+    ]
+  },
+  {
+    id:7, name:"Prestige Men's Grooming", category:'Cukur Pria', city:'Jakarta Pusat',
+    priceMin:90000, priceMax:180000, rating:4.8, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:"Prestige Men's Grooming menghadirkan pengalaman grooming premium meliputi potong rambut, styling, dan perawatan janggut dengan produk kelas atas.",
+    reviews:[
+      {name:'Farrel D.', rating:4.9, comment:'Pelayanannya premium banget, cocok buat yang mau tampil maksimal.'},
+      {name:'Iqbal R.', rating:4.7, comment:'Perawatan janggutnya juara, barbernya sangat berpengalaman.'}
+    ]
+  },
+  {
+    id:8, name:'Rapi Cukur Panggilan', category:'Cukur Pria', city:'Bekasi',
+    priceMin:45000, priceMax:75000, rating:4.4, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Rapi Cukur Panggilan melayani potong rambut on-demand ke rumah dengan jangkauan area luas, cocok untuk keluarga dan kelompok yang ingin potong rambut bersama.',
+    reviews:[
+      {name:'Doni H.', rating:4.4, comment:'Bisa panggil ke rumah untuk sekeluarga, praktis banget.'},
+      {name:'Agus P.', rating:4.3, comment:'Datang tepat waktu, harga terjangkau untuk hasil rapi.'}
+    ]
+  },
+
+  /* ===== FOTOGRAFER (contoh penyedia jasa) ===== */
+  {
+    id:2, name:'Rasya Photoworks', category:'Fotografer', city:'Bandung',
+    priceMin:350000, priceMax:750000, rating:4.8, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Studio fotografi untuk kebutuhan prewedding, produk, dan acara korporat dengan editing sinematik dan pencahayaan alami yang berkarakter.',
+    reviews:[
+      {name:'Melisa T.', rating:5, comment:'Hasil foto prewedding kami luar biasa, editingnya estetik.'},
+      {name:'Bagas H.', rating:4.7, comment:'Fotografernya sabar dan arahan posenya enak diikuti.'}
+    ]
+  },
+  {
+    id:9, name:'Lensa Kita Photography', category:'Fotografer', city:'Jakarta',
+    priceMin:250000, priceMax:500000, rating:4.6, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Lensa Kita Photography melayani sesi foto keluarga, ulang tahun, dan acara kantor dengan gaya natural dan hasil edit cepat dalam 3 hari kerja.',
+    reviews:[
+      {name:'Sari W.', rating:4.7, comment:'Hasil fotonya natural banget, editnya juga cepat.'},
+      {name:'Teguh L.', rating:4.5, comment:'Fotografernya komunikatif dan hasil sesuai ekspektasi.'}
+    ]
+  },
+  {
+    id:10, name:'Momentum Studio', category:'Fotografer', city:'Surabaya',
+    priceMin:500000, priceMax:1200000, rating:4.9, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Momentum Studio spesialis foto prewedding dan komersial dengan tim kreatif berpengalaman lebih dari 10 tahun serta peralatan studio full-frame.',
+    reviews:[
+      {name:'Clara N.', rating:5, comment:'Kualitas fotonya level profesional, worth banget harganya.'},
+      {name:'Fikri A.', rating:4.8, comment:'Konsep foto selalu fresh dan hasil editing memukau.'}
+    ]
+  },
+  {
+    id:11, name:'Candid Frame Photo', category:'Fotografer', city:'Bandung',
+    priceMin:150000, priceMax:300000, rating:4.3, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Candid Frame Photo fokus pada foto candid dan dokumentasi acara kasual dengan pendekatan santai dan hasil gambar yang jujur apa adanya.',
+    reviews:[
+      {name:'Wulan S.', rating:4.4, comment:'Gaya candidnya dapet banget, momen alami tertangkap semua.'},
+      {name:'Ilham P.', rating:4.2, comment:'Harga ramah kantong untuk hasil yang cukup bagus.'}
+    ]
+  },
+  {
+    id:12, name:'Skyline Visual Works', category:'Fotografer', city:'Yogyakarta',
+    priceMin:400000, priceMax:900000, rating:4.7, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Skyline Visual Works menyediakan jasa foto dan video untuk acara besar, drone aerial, hingga dokumentasi wisata dengan jangkauan area yang luas.',
+    reviews:[
+      {name:'Nadia R.', rating:4.8, comment:'Hasil dronenya keren banget, cocok buat dokumentasi outdoor.'},
+      {name:'Yoga T.', rating:4.6, comment:'Timnya profesional, video hasilnya sinematik.'}
+    ]
+  },
+
+  /* ===== CLEANING SERVICE (contoh penyedia jasa) ===== */
+  {
+    id:3, name:'Bersih Kinclong', category:'Cleaning Service', city:'Jakarta',
+    priceMin:120000, priceMax:250000, rating:4.6, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Jasa bersih-bersih rumah dan kantor dengan tim terlatih dan peralatan lengkap. Tersedia paket harian maupun paket bulanan sesuai kebutuhan.',
+    reviews:[
+      {name:'Nadia F.', rating:4.7, comment:'Rumah jadi kinclong banget, timnya rapi kerja.'},
+      {name:'Rio S.', rating:4.5, comment:'Tepat waktu dan hasil memuaskan untuk paket bulanan.'}
+    ]
+  },
+  {
+    id:13, name:'Rapih Home Cleaning', category:'Cleaning Service', city:'Tangerang',
+    priceMin:100000, priceMax:200000, rating:4.5, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Rapih Home Cleaning menyediakan jasa bersih rumah harian dan mingguan dengan checklist standar kebersihan yang terukur di setiap kunjungan.',
+    reviews:[
+      {name:'Mira K.', rating:4.6, comment:'Selalu sesuai checklist, hasil bersih dan wangi.'},
+      {name:'Denny F.', rating:4.4, comment:'Tim datang tepat waktu, kerja rapi dan teliti.'}
+    ]
+  },
+  {
+    id:14, name:'Kilat Bersih Group', category:'Cleaning Service', city:'Jakarta',
+    priceMin:150000, priceMax:320000, rating:4.7, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Kilat Bersih Group melayani deep cleaning rumah, apartemen, dan kantor dengan peralatan steam dan tenaga kerja bersertifikat higienis.',
+    reviews:[
+      {name:'Putri A.', rating:4.8, comment:'Deep cleaning-nya niat banget, sudut ruangan bersih total.'},
+      {name:'Hadi S.', rating:4.6, comment:'Hasil kerja maksimal, worth harganya.'}
+    ]
+  },
+  {
+    id:15, name:'Sapu Jagat Cleaning', category:'Cleaning Service', city:'Bekasi',
+    priceMin:80000, priceMax:150000, rating:4.2, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Sapu Jagat Cleaning cocok untuk kebutuhan bersih-bersih ringan harian dengan harga bersahabat dan proses booking yang cepat.',
+    reviews:[
+      {name:'Rani D.', rating:4.3, comment:'Harganya murah, hasil bersih standar untuk kebutuhan harian.'},
+      {name:'Eko W.', rating:4.1, comment:'Booking gampang, timnya cepat kerja.'}
+    ]
+  },
+  {
+    id:16, name:'Segar Ceria Housekeeping', category:'Cleaning Service', city:'Depok',
+    priceMin:130000, priceMax:280000, rating:4.6, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Segar Ceria Housekeeping menawarkan paket bulanan untuk rumah tangga dengan tim tetap sehingga lebih memahami kebutuhan pelanggan dari waktu ke waktu.',
+    reviews:[
+      {name:'Lestari H.', rating:4.7, comment:'Paket bulanannya praktis, tim selalu sama jadi lebih nyaman.'},
+      {name:'Bayu N.', rating:4.5, comment:'Kerja rapi dan komunikasi lancar soal jadwal.'}
+    ]
+  },
+
+  /* ===== TEKNISI AC & ELEKTRONIK (contoh penyedia jasa) ===== */
+  {
+    id:4, name:'Fixindo Teknisi AC', category:'Teknisi AC & Elektronik', city:'Tangerang',
+    priceMin:75000, priceMax:200000, rating:4.6, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Melayani perbaikan dan servis berkala AC, kulkas, mesin cuci, dan peralatan elektronik rumah tangga lainnya dengan teknisi bersertifikat dan garansi 14 hari.',
+    reviews:[
+      {name:'Hendra J.', rating:4.6, comment:'AC saya langsung dingin lagi, teknisinya profesional.'},
+      {name:'Lia M.', rating:4.5, comment:'Ada garansi jadi lebih tenang, harga juga wajar.'}
+    ]
+  },
+  {
+    id:17, name:'Dingin Sejuk Service AC', category:'Teknisi AC & Elektronik', city:'Jakarta',
+    priceMin:90000, priceMax:220000, rating:4.5, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Dingin Sejuk Service AC melayani cuci AC, isi freon, dan perbaikan kerusakan ringan hingga berat dengan teknisi berpengalaman di berbagai merek AC.',
+    reviews:[
+      {name:'Fahmi Y.', rating:4.6, comment:'AC jadi dingin maksimal, teknisinya rapi kerjanya.'},
+      {name:'Sinta P.', rating:4.4, comment:'Respon cepat dan harga sesuai dengan kualitas servis.'}
+    ]
+  },
+  {
+    id:18, name:'Elektro Andal Teknisi', category:'Teknisi AC & Elektronik', city:'Bekasi',
+    priceMin:60000, priceMax:180000, rating:4.4, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Elektro Andal Teknisi menangani servis mesin cuci, kulkas, dan peralatan elektronik rumah tangga lain dengan garansi suku cadang 7 hari.',
+    reviews:[
+      {name:'Rudi T.', rating:4.5, comment:'Mesin cuci saya langsung normal lagi, ada garansi juga.'},
+      {name:'Anisa M.', rating:4.3, comment:'Teknisinya jujur soal kerusakan, harga wajar.'}
+    ]
+  },
+  {
+    id:19, name:'Servis Kilat Elektronik', category:'Teknisi AC & Elektronik', city:'Tangerang Selatan',
+    priceMin:50000, priceMax:150000, rating:4.3, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Servis Kilat Elektronik fokus pada panggilan darurat perbaikan elektronik dengan waktu respon cepat untuk area terdekat.',
+    reviews:[
+      {name:'Galih P.', rating:4.4, comment:'Responnya cepat banget pas kondisi darurat.'},
+      {name:'Novi R.', rating:4.2, comment:'Teknisi datang cepat, perbaikan selesai dalam sejam.'}
+    ]
+  },
+  {
+    id:20, name:'Garansi Prima Teknisi', category:'Teknisi AC & Elektronik', city:'Jakarta',
+    priceMin:100000, priceMax:250000, rating:4.8, providerEmail:null,
+    photo:'',
+    portfolio:[],
+    desc:'Garansi Prima Teknisi menyediakan servis elektronik rumah tangga skala besar dengan garansi resmi hingga 30 hari dan teknisi tersertifikasi pabrikan.',
+    reviews:[
+      {name:'Hana W.', rating:4.9, comment:'Garansinya lengkap, teknisi sangat profesional dan bersertifikat.'},
+      {name:'Oscar B.', rating:4.7, comment:'Kualitas servis terbaik yang pernah saya pakai untuk elektronik.'}
+    ]
+  }
+];
+
+const UNSPLASH_IMAGES = {
+  'Cukur Pria': [
+    'https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=1400&q=86',
+    'https://unsplash.com/photos/wJoB8D3hnzc/download?force=true&w=1400',
+    'https://unsplash.com/photos/tgPrIYnW3g4/download?force=true&w=1400'
+  ],
+  'Fotografer': [
+    'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?auto=format&fit=crop&w=1400&q=86',
+    'https://images.unsplash.com/photo-1497316730643-415fac54a2af?auto=format&fit=crop&w=1400&q=86',
+    'https://images.unsplash.com/photo-1493863641943-9b68992a8d07?auto=format&fit=crop&w=1400&q=86'
+  ],
+  'Cleaning Service': [
+    'https://images.unsplash.com/photo-1603712725038-e9334ae8f39f?auto=format&fit=crop&w=1400&q=86',
+    'https://unsplash.com/photos/-dc38HdQR1M/download?force=true&w=1400',
+    'https://unsplash.com/photos/5TXz228u4eo/download?force=true&w=1400',
+    'https://unsplash.com/photos/-9gPKrsbGmc/download?force=true&w=1400'
+  ],
+  'Teknisi AC & Elektronik': [
+    'https://images.unsplash.com/photo-1682345262055-8f95f3c513ea?auto=format&fit=crop&w=1400&q=86',
+    'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1400&q=86',
+    'https://images.unsplash.com/photo-1555963966-b7ae5404b6ed?auto=format&fit=crop&w=1400&q=86',
+    'https://images.unsplash.com/photo-1660330589693-99889d60181e?auto=format&fit=crop&w=1400&q=86'
+  ]
+};
+providers.forEach((provider, index) => {
+  const images = UNSPLASH_IMAGES[provider.category];
+  provider.photo = images[index % images.length];
+  provider.portfolio = [1, 2, 3].map(offset => images[(index + offset) % images.length]);
+});
+
+let legacyBookings = [
+  { id:1, customerEmail:'rieke@andallo.com', providerId:1, date:'2026-09-08', time:'10:00', total:50000, status:'SELESAI', rated:false,
+    chat:[ {sender:'customer', text:'Halo kak, saya sudah booking untuk hari ini ya', time:'09.50'}, {sender:'provider', text:'Siap kak, saya meluncur ke lokasi jam 10 tepat.', time:'09.52'} ] },
+  { id:2, customerEmail:'rieke@andallo.com', providerId:2, date:'2026-09-16', time:'14:00', total:350000, status:'ON_PROGRESS', rated:false,
+    chat:[ {sender:'customer', text:'Sesi foto hari ini di taman kota ya kak', time:'13.40'}, {sender:'provider', text:'Baik, saya sudah di lokasi dan sedang menyiapkan alat.', time:'13.45'} ] },
+  { id:3, customerEmail:'rieke@andallo.com', providerId:3, date:'2026-09-20', time:'09:00', total:120000, status:'DIMULAI', rated:false, chat:[] },
+  { id:4, customerEmail:'rieke@andallo.com', providerId:4, date:'2026-09-22', time:'11:00', total:75000, status:'PENDING', rated:false, chat:[] }
+];
+let bookings = [];
+let bookingIdCounter = 5;
+
+const faqData = [
+  {q:'Bagaimana cara memesan jasa di Andallo?', a:'Cari penyedia di halaman Cari Jasa, buka detailnya, lalu ajukan pesanan sesuai tanggal dan jam pilihan. Setelah penyedia menerima, unggah bukti pembayaran dari halaman Pesanan Saya.'},
+  {q:'Bagaimana sistem pembayaran dan harga di Andallo?', a:'Harga yang tertera merupakan harga mulai. Pada contoh ini, penyedia menerima pesanan terlebih dahulu, pelanggan mengunggah gambar bukti pembayaran, lalu admin memverifikasi sebelum layanan dimulai. Tidak ada transfer uang sungguhan.'},
+  {q:'Kapan saya bisa memberi rating ke penyedia jasa?', a:'Tombol "Beri Rating & Ulasan" akan aktif di Dashboard kamu setelah status pesanan diubah menjadi SELESAI oleh penyedia jasa atau admin.'},
+  {q:'Bagaimana cara menjadi mitra penyedia jasa?', a:'Kirim pesan melalui formulir Bantuan dengan mencantumkan jenis jasa, lokasi, dan pengalamanmu — tim kami akan menghubungimu untuk proses verifikasi.'},
+  {q:'Apa saja standar kerapihan Andallo?', a:'Setiap mitra wajib menyelesaikan pekerjaan sesuai deskripsi jasa, tepat waktu, dan menjaga kebersihan area kerja sebelum status ditandai SELESAI.'},
+  {q:'Bagaimana kebijakan privasi data saya?', a:'Situs ini menggunakan akun contoh. Pesanan, chat, dan gambar bukti disimpan dalam ruang privat pemilik situs. Jangan unggah data atau bukti transfer sungguhan.'},
+  {q:'Apa ketentuan penggunaan Andallo saat ini?', a:'Ini adalah situs contoh untuk mencoba pencarian, perbandingan, dan pemesanan jasa. Penyedia dan ulasan merupakan data contoh; tidak ada transaksi uang atau konfirmasi layanan nyata.'}
+];
+
+let filterState = { search:'', kategori:'', kota:'', sort:'rekomendasi' };
+let activeLocation = { lat:-6.1783, lng:106.6319, label:'Tangerang' };
+const cityCoordinates = {
+  'Tangerang':[-6.1783,106.6319], 'Tangerang Selatan':[-6.2886,106.7179],
+  'Jakarta':[-6.2088,106.8456], 'Jakarta Selatan':[-6.2615,106.8106], 'Jakarta Pusat':[-6.1865,106.8341],
+  'Bekasi':[-6.2383,106.9756], 'Depok':[-6.4025,106.7942], 'Bandung':[-6.9175,107.6191],
+  'Surabaya':[-7.2575,112.7521], 'Yogyakarta':[-7.7956,110.3695]
+};
+let currentDetailId = null;
+let currentChatBookingId = null;
+let currentRatingBookingId = null;
+let selectedStars = 0;
+let compareIds = [];
+
+const STATUS_FLOW = ['PENDING','PAYMENT_REVIEW','DITERIMA','ON_PROGRESS','SELESAI'];
+const STATUS_LABEL = { AWAITING_PAYMENT:'Menunggu bukti transfer', PAYMENT_REVIEW:'Menunggu konfirmasi mitra', PENDING:'Menunggu bukti transfer', DITERIMA:'Diterima', DIMULAI:'Diterima', ON_PROGRESS:'Sedang Berjalan', SELESAI:'Selesai', CANCELLED:'Dibatalkan' };
+const STATUS_COLOR = {
+  AWAITING_PAYMENT:'bg-orange-100 text-orange-800', PAYMENT_REVIEW:'bg-blue-100 text-blue-800', PENDING:'bg-amber-100 text-amber-700', DITERIMA:'bg-cyan-100 text-cyan-800', DIMULAI:'bg-cyan-100 text-cyan-800',
+  ON_PROGRESS:'bg-indigo-100 text-indigo-700', SELESAI:'bg-emerald-100 text-emerald-700',
+  CANCELLED:'bg-red-100 text-red-700'
+};
+
+function distanceKm(lat1,lng1,lat2,lng2){
+  const toRad = value => value * Math.PI / 180;
+  const dLat = toRad(lat2-lat1), dLng = toRad(lng2-lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+  return 6371 * 2 * Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function providerDistance(provider){
+  const coords = cityCoordinates[provider.city] || cityCoordinates['Jakarta'];
+  return distanceKm(activeLocation.lat,activeLocation.lng,coords[0],coords[1]) + ((provider.id % 5) * .28);
+}
+function heroSearch(event){
+  event.preventDefault();
+  const query = document.getElementById('heroSearchInput').value.trim();
+  const city = document.getElementById('heroCityInput').value;
+  document.getElementById('searchInput').value = query;
+  document.getElementById('filterKota').value = city;
+  showPage('jasa');
+  applyFilters();
+}
+function detectUserLocation(){
+  if(!navigator.geolocation){ showToast('Browser ini tidak mendukung deteksi lokasi.'); return; }
+  const button = document.getElementById('locationButton');
+  button.disabled = true;
+  button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-1"></i> Mendeteksi...';
+  navigator.geolocation.getCurrentPosition(position => {
+    activeLocation = { lat:position.coords.latitude, lng:position.coords.longitude, label:'Lokasi perangkat' };
+    document.getElementById('activeLocationLabel').textContent = 'Acuan lokasi: Lokasi perangkat';
+    document.getElementById('filterSort').value = 'distance';
+    button.disabled = false;
+    button.innerHTML = '<i class="fa-solid fa-circle-check mr-1"></i> Lokasi Aktif';
+    applyFilters();
+    showToast('Lokasi aktif. Jarak penyedia sudah dihitung ulang.');
+  }, () => {
+    button.disabled = false;
+    button.innerHTML = '<i class="fa-solid fa-location-crosshairs mr-1"></i> Gunakan Lokasi';
+    showToast('Izin lokasi tidak tersedia. Acuan Tangerang tetap digunakan.');
+  }, { enableHighAccuracy:false, timeout:8000, maximumAge:300000 });
+}
+
+/* ---------------------------------------------------------------------------------------
+   2. NAVIGASI HALAMAN
+--------------------------------------------------------------------------------------- */
+function showPage(pageId){
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-'+pageId).classList.add('active');
+  document.body.classList.toggle('home-active', pageId === 'beranda');
+  document.querySelectorAll('.nav-link').forEach(l => {
+    if(l.dataset.nav === pageId){ l.classList.add('bg-white','text-[#0F3D2E]'); l.classList.remove('text-white/80'); }
+    else { l.classList.remove('bg-white','text-[#0F3D2E]'); l.classList.add('text-white/80'); }
+  });
+  window.scrollTo({top:0, behavior:'smooth'});
+  closeAllDropdowns();
+  if(pageId === 'dashboard-customer') renderCustomerDashboard();
+  if(pageId === 'dashboard-admin') renderAdminDashboard();
+  if(pageId === 'bandingkan') renderComparisonPage();
+  renderCompareDock();
+}
+function toggleMobileMenu(){ document.getElementById('mobileMenu').classList.toggle('hidden'); document.getElementById('mobileMenu').classList.toggle('flex'); }
+
+/* ---------------------------------------------------------------------------------------
+   3. DROPDOWN & MODAL HELPERS
+--------------------------------------------------------------------------------------- */
+function toggleDropdown(id){
+  const panel = document.getElementById(id);
+  const isOpen = !panel.classList.contains('hidden');
+  closeAllDropdowns();
+  if(!isOpen) panel.classList.remove('hidden');
+}
+function closeAllDropdowns(){ document.querySelectorAll('.dropdown-panel').forEach(p => p.classList.add('hidden')); }
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.dropdown-panel') && !e.target.closest('button[onclick^="toggleDropdown"]')) closeAllDropdowns();
+});
+
+function openModal(id){ document.getElementById(id).classList.add('open'); }
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+  const msgId = id === 'modalMasuk' ? 'loginMsg' : id === 'modalDaftar' ? 'registerMsg' : null;
+  if(msgId) document.getElementById(msgId).textContent = '';
+}
+function switchModal(fromId, toId){ closeModal(fromId); openModal(toId); }
+
+/* ---------------------------------------------------------------------------------------
+   4. AUTH: NAVBAR STATE, LOGIN, REGISTER, VERIFIKASI
+--------------------------------------------------------------------------------------- */
+function updateNavbarAuthState(){
+  const area = document.getElementById('navAuthArea');
+  if(currentUser){
+    const roleLabel = { customer:'Customer', provider:'Mitra Jasa', admin:'Admin' }[currentUser.role];
+    area.innerHTML = `
+      <div class="relative">
+        <button onclick="toggleDropdown('userDropdown')" class="flex items-center gap-2 bg-white/10 hover:bg-white/20 transition rounded-full pl-2 pr-3 py-1.5">
+          <span class="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs text-[#0F3D2E]" style="background:#FF9B21;">${currentUser.name.charAt(0).toUpperCase()}</span>
+          <span class="text-white text-sm text-left leading-tight">
+            <span class="block font-semibold">${currentUser.name.split(' ')[0]}</span>
+            <span class="block text-[10px] text-white/60">${roleLabel}</span>
+          </span>
+          <i class="fa-solid fa-chevron-down text-white/60 text-xs"></i>
+        </button>
+        <div id="userDropdown" class="dropdown-panel hidden absolute top-[110%] right-0 bg-white rounded-xl shadow-xl p-2 w-52 z-30">
+          <button onclick="goToDashboard()" class="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-[#EAF5F0] flex items-center gap-2"><i class="fa-solid fa-gauge w-4"></i> ${currentUser.role === 'customer' ? 'Pesanan Saya' : 'Dashboard Mitra'}</button>
+          <button onclick="showPage('jasa')" class="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-[#EAF5F0] flex items-center gap-2"><i class="fa-solid fa-magnifying-glass w-4"></i> Cari Jasa</button>
+          <button onclick="logout()" class="w-full text-left px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-[#EAF5F0] flex items-center gap-2 text-red-600"><i class="fa-solid fa-right-from-bracket w-4"></i> Keluar</button>
+        </div>
+      </div>`;
+  } else {
+    area.innerHTML = `<button onclick="openModal('modalMasuk')" class="px-5 py-2.5 rounded-full font-bold text-sm text-[#0F3D2E] transition hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-900/50" style="background:#FF9B21;">Daftar / Masuk</button>`;
+  }
+}
+function goToDashboard(){
+  closeAllDropdowns();
+  if(currentUser.role === 'customer') showPage('dashboard-customer');
+  else showPage('dashboard-admin');
+}
+function logout(){
+  currentUser = null;
+  updateNavbarAuthState();
+  showToast('Kamu berhasil keluar dari akun.');
+  showPage('beranda');
+}
+
+function handleLoginSubmit(e){
+  e.preventDefault();
+  const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+  const password = document.getElementById('loginPassword').value;
+  const msg = document.getElementById('loginMsg');
+  const user = users.find(u => u.email === email);
+
+  if(!user){ msg.textContent = 'Email belum terdaftar.'; return; }
+  if(!user.verified){ msg.textContent = 'Email belum diverifikasi.'; return; }
+  if(user.password !== password){ msg.textContent = 'Kata sandi salah.'; return; }
+
+  msg.textContent = '';
+  document.getElementById('loginForm') && document.getElementById('loginForm').reset();
+  closeModal('modalMasuk');
+  currentUser = user;
+  playWelcomeAnimation();
+}
+
+function quickDemoLogin(email){
+  const user = users.find(u => u.email === email);
+  if(!user) return;
+  currentUser = user;
+  playWelcomeAnimation();
+}
+
+function handleRegisterSubmit(e){
+  e.preventDefault();
+  const nama = document.getElementById('regNama').value.trim();
+  const email = document.getElementById('regEmail').value.trim().toLowerCase();
+  const password = document.getElementById('regPassword').value;
+  const msg = document.getElementById('registerMsg');
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if(!nama){ msg.textContent = 'Nama pengguna wajib diisi.'; return; }
+  if(!emailPattern.test(email)){ msg.textContent = 'Format email tidak valid.'; return; }
+  if(password.length < 6){ msg.textContent = 'Kata sandi minimal 6 karakter.'; return; }
+
+  const existing = users.find(u => u.email === email);
+  if(existing && existing.verified){ msg.textContent = 'Email ini sudah terdaftar. Silakan masuk.'; return; }
+
+  msg.textContent = '';
+  pendingVerification = { nama, email, password };
+  document.getElementById('verifEmailTarget').textContent = email;
+  closeModal('modalDaftar');
+  document.getElementById('registerForm') && document.getElementById('registerForm').reset();
+  openModal('modalVerifikasi');
+}
+
+function confirmVerification(){
+  if(!pendingVerification) return;
+  const { nama, email, password } = pendingVerification;
+  const newUser = { email, password, name:nama, role:'customer', verified:true };
+  const idx = users.findIndex(u => u.email === email);
+  if(idx >= 0) users[idx] = newUser; else users.push(newUser);
+
+  pendingVerification = null;
+  closeModal('modalVerifikasi');
+  currentUser = newUser;
+  showToast('Akun contoh berhasil diaktifkan.');
+  playWelcomeAnimation();
+}
+
+function playWelcomeAnimation(){
+  const overlay = document.getElementById('welcomeOverlay');
+  const line = document.getElementById('welcomeLine');
+  const text = 'SELAMAT DATANG DI ANDALLO';
+  line.innerHTML = text.split(' ').map((w,i) => `<span style="animation-delay:${0.28 + i*0.07}s">${w}</span>`).join(' ');
+  overlay.classList.add('show');
+  setTimeout(() => {
+    overlay.classList.remove('show');
+    updateNavbarAuthState();
+    if(currentUser.role === 'customer') showPage('beranda');
+    else goToDashboard();
+  }, 2600);
+}
+
+/* ---------------------------------------------------------------------------------------
+   5. TOAST
+--------------------------------------------------------------------------------------- */
+let toastTimer = null;
+function showToast(text){
+  const toast = document.getElementById('toast');
+  document.getElementById('toastText').textContent = text;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 3200);
+}
+
+/* ---------------------------------------------------------------------------------------
+   6. CAROUSEL BERANDA
+--------------------------------------------------------------------------------------- */
+const carouselSlides = [
+  {img:'https://images.unsplash.com/photo-1621605815971-fbc98d665033?auto=format&fit=crop&w=1400&q=86', title:'Cukur rambut, tanpa antre', sub:'Barber profesional siap datang ke rumahmu'},
+  {img:'https://images.unsplash.com/photo-1542038784456-1ea8e935640e?auto=format&fit=crop&w=1400&q=86', title:'Abadikan momen bersama fotografer terbaik', sub:'Dari acara keluarga hingga prewedding'},
+  {img:'https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1400&q=86', title:'Semua kebutuhan jasa, dalam satu genggaman', sub:'Beragam layanan profesional di dekatmu'}
+];
+let carouselIndex = 0, carouselTimer = null;
+function renderCarousel(){
+  document.getElementById('carouselTrack').innerHTML = carouselSlides.map(s => `
+    <div class="carousel-slide relative">
+      <img src="${s.img}" class="w-full h-full object-cover" style="height:100%;" alt="${s.title}">
+      <div class="absolute left-0 right-0 bottom-0 p-5 text-white" style="background:linear-gradient(to top, rgba(15,61,46,.85), transparent);">
+        <b class="font-head text-base block">${s.title}</b><span class="text-xs opacity-85">${s.sub}</span>
+      </div>
+    </div>`).join('');
+  document.getElementById('carouselDots').innerHTML = carouselSlides.map((_,i) =>
+    `<span onclick="goToSlide(${i})" class="h-1.5 rounded-full cursor-pointer transition-all ${i===carouselIndex?'w-5 bg-[#FF9B21]':'w-1.5 bg-white/45'}"></span>`).join('');
+  updateCarouselPosition();
+}
+function updateCarouselPosition(){
+  document.getElementById('carouselTrack').style.transform = `translateX(-${carouselIndex*100}%)`;
+  document.querySelectorAll('#carouselDots span').forEach((d,i) => {
+    d.className = `h-1.5 rounded-full cursor-pointer transition-all ${i===carouselIndex?'w-5 bg-[#FF9B21]':'w-1.5 bg-white/45'}`;
+  });
+}
+function carouselMove(dir){ carouselIndex = (carouselIndex + dir + carouselSlides.length) % carouselSlides.length; updateCarouselPosition(); resetCarouselTimer(); }
+function goToSlide(i){ carouselIndex = i; updateCarouselPosition(); resetCarouselTimer(); }
+function resetCarouselTimer(){ clearInterval(carouselTimer); carouselTimer = setInterval(() => carouselMove(1), 4500); }
+
+/* ---------------------------------------------------------------------------------------
+   7. RENDER: KATEGORI, KARTU PROVIDER, TESTIMONI
+--------------------------------------------------------------------------------------- */
+function renderCategories(){
+  document.getElementById('categoryGrid').innerHTML = categories.map(c => `
+    <button onclick="goToCategory('${c.name}')" class="bg-white border border-[#DCE9E2] rounded-2xl p-5 text-center hover:-translate-y-1 hover:shadow-lg transition">
+      <div class="w-12 h-12 rounded-xl mx-auto mb-3 flex items-center justify-center text-lg" style="background:#0F3D2E; color:#FF9B21;"><i class="fa-solid ${c.icon}"></i></div>
+      <b class="block font-head text-sm" style="color:#0F3D2E;">${c.name}</b>
+    </button>`).join('');
+}
+function starString(rating){
+  const full = Math.round(rating);
+  return '<i class="fa-solid fa-star"></i>'.repeat(full) + '<i class="fa-regular fa-star"></i>'.repeat(5-full);
+}
+function escapeReview(value){
+  return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function providerCard(p){
+  const selected = compareIds.includes(p.id);
+  return `
+    <article class="bg-white border border-[#DCE9E2] rounded-2xl overflow-hidden text-left hover:-translate-y-1 hover:shadow-xl transition w-full ${selected ? 'compare-selected' : ''}">
+      <button onclick="openProviderDetail(${p.id})" class="relative h-40 overflow-hidden w-full text-left block">
+        <img src="${p.photo}" class="w-full h-full object-cover" alt="${p.name}">
+        <span class="absolute top-3 left-3 text-[11px] font-bold px-3 py-1 rounded-full text-[#FF9B21]" style="background:rgba(15,61,46,.85);">${p.category}</span>
+        ${selected ? '<span class="absolute top-3 right-3 w-8 h-8 rounded-full grid place-items-center text-[#0F3D2E] bg-[#FF9B21] shadow-lg"><i class="fa-solid fa-check"></i></span>' : ''}
+      </button>
+      <div class="p-4">
+        <button onclick="openProviderDetail(${p.id})" class="font-head text-[15px] font-bold block mb-1 text-left hover:underline" style="color:#0F3D2E;">${p.name}</button>
+        <div class="text-xs text-[#66716A] mb-2 flex items-center gap-1"><i class="fa-solid fa-location-dot"></i> ${p.city} · ${providerDistance(p).toFixed(1)} km</div>
+        <div class="text-amber-500 text-xs mb-2">${starString(p.rating)} <span class="text-[#66716A] font-semibold">${p.rating}</span></div>
+        <div class="font-head font-bold text-sm" style="color:#1B4D3E;">Rp${p.priceMin.toLocaleString('id-ID')}<span class="text-[11px] font-medium text-[#66716A]"> / mulai dari</span></div>
+        <div class="grid grid-cols-2 gap-2 mt-4">
+          <button onclick="openProviderDetail(${p.id})" class="py-2.5 rounded-xl text-xs font-bold border border-[#DCE9E2] hover:bg-[#EAF5F0]">Detail</button>
+          <button onclick="toggleCompare(${p.id})" class="py-2.5 rounded-xl text-xs font-bold transition ${selected ? 'text-[#0F3D2E]' : 'text-white'}" style="background:${selected ? '#FF9B21' : '#1B4D3E'};"><i class="fa-solid ${selected ? 'fa-check' : 'fa-plus'} mr-1"></i>${selected ? 'Dipilih' : 'Bandingkan'}</button>
+        </div>
+      </div>
+    </article>`;
+}
+
+/* ---------------------------------------------------------------------------------------
+   7B. PERBANDINGAN HARGA
+--------------------------------------------------------------------------------------- */
+function toggleCompare(id){
+  const provider = providers.find(p => p.id === id);
+  if(!provider) return;
+
+  if(compareIds.includes(id)){
+    compareIds = compareIds.filter(providerId => providerId !== id);
+    showToast(`${provider.name} dihapus dari perbandingan.`);
+  } else {
+    if(compareIds.length >= 3){ showToast('Maksimal tiga penyedia dalam satu perbandingan.'); return; }
+    const firstProvider = providers.find(p => p.id === compareIds[0]);
+    if(firstProvider && firstProvider.category !== provider.category){
+      showToast(`Pilih penyedia kategori ${firstProvider.category} agar harga bisa dibandingkan dengan adil.`);
+      return;
+    }
+    compareIds.push(id);
+    showToast(`${provider.name} ditambahkan untuk dibandingkan.`);
+  }
+
+  refreshComparisonUI();
+  if(document.getElementById('page-detail').classList.contains('active') && currentDetailId){ openProviderDetail(currentDetailId); }
+}
+
+function refreshComparisonUI(){
+  renderHomeProviders();
+  applyFilters();
+  renderCompareDock();
+  if(document.getElementById('page-bandingkan').classList.contains('active')) renderComparisonPage();
+}
+
+function renderCompareDock(){
+  const selected = compareIds.map(id => providers.find(p => p.id === id)).filter(Boolean);
+  const dock = document.getElementById('compareDock');
+  document.getElementById('compareDockCount').textContent = selected.length;
+  document.getElementById('compareDockAvatars').innerHTML = selected.map(p => `<span class="compare-avatar" title="${p.name}">${p.name.split(' ').map(word => word[0]).join('').slice(0,2)}</span>`).join('');
+  dock.classList.toggle('show', selected.length > 0 && !document.getElementById('page-bandingkan').classList.contains('active'));
+
+  ['navCompareCount','mobileCompareCount'].forEach(id => {
+    const badge = document.getElementById(id);
+    badge.textContent = selected.length;
+    badge.classList.toggle('hidden', selected.length === 0);
+    badge.classList.toggle('flex', selected.length > 0);
+  });
+}
+
+function openComparison(){
+  if(compareIds.length < 2){ showToast('Pilih minimal dua penyedia untuk membandingkan harga.'); return; }
+  showPage('bandingkan');
+}
+
+function clearComparison(){
+  if(!compareIds.length){ showToast('Daftar perbandingan masih kosong.'); return; }
+  compareIds = [];
+  refreshComparisonUI();
+  showToast('Daftar perbandingan dikosongkan.');
+}
+
+function removeFromComparison(id){
+  compareIds = compareIds.filter(providerId => providerId !== id);
+  refreshComparisonUI();
+}
+
+function renderComparisonPage(){
+  const selected = compareIds.map(id => providers.find(p => p.id === id)).filter(Boolean);
+  const container = document.getElementById('comparisonContent');
+  document.getElementById('compareDock').classList.remove('show');
+
+  if(!selected.length){
+    container.innerHTML = `<div class="bg-white border border-[#DCE9E2] rounded-3xl py-16 px-5 text-center shadow-lg">
+      <div class="w-16 h-16 rounded-2xl mx-auto mb-5 grid place-items-center text-xl" style="background:#EAF5F0; color:#1B4D3E;"><i class="fa-solid fa-scale-balanced"></i></div>
+      <h2 class="font-head font-bold text-xl mb-2" style="color:#0F3D2E;">Belum ada penyedia yang dipilih</h2>
+      <p class="text-sm text-[#66716A] max-w-md mx-auto mb-6">Buka halaman Cari Jasa lalu tekan tombol Bandingkan pada dua atau tiga penyedia dalam kategori yang sama.</p>
+      <button onclick="showPage('jasa')" class="px-6 py-3 rounded-full font-bold text-sm text-[#0F3D2E]" style="background:#FF9B21;">Cari penyedia jasa</button>
+    </div>`;
+    renderCompareDock();
+    return;
+  }
+
+  const lowestPrice = Math.min(...selected.map(p => p.priceMin));
+  const columns = selected.map(p => `
+    <th class="p-4 border-l border-[#DCE9E2] text-left ${p.priceMin === lowestPrice ? 'bg-emerald-50' : 'bg-[#EAF5F0]'}">
+      <div class="relative">
+        ${p.priceMin === lowestPrice ? '<span class="inline-flex text-[9px] font-bold px-2 py-1 rounded-full mb-2 text-emerald-800 bg-emerald-100">PALING HEMAT</span>' : ''}
+        <img src="${p.photo}" class="w-full h-28 object-cover rounded-xl mb-3" alt="${p.name}">
+        <b class="font-head text-sm block" style="color:#0F3D2E;">${p.name}</b>
+        <span class="text-[11px] text-[#66716A] font-normal">${p.category}</span>
+        <button onclick="removeFromComparison(${p.id})" class="absolute top-0 right-0 w-8 h-8 rounded-full bg-white/90 text-red-600 shadow" aria-label="Hapus ${p.name}"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </th>`).join('');
+
+  const comparisonRows = [
+    ['Harga mulai', p => `<b class="font-head text-base" style="color:#1B4D3E;">Rp${p.priceMin.toLocaleString('id-ID')}</b>`],
+    ['Rentang harga', p => `Rp${p.priceMin.toLocaleString('id-ID')} – Rp${p.priceMax.toLocaleString('id-ID')}`],
+    ['Selisih dari termurah', p => p.priceMin === lowestPrice ? '<b class="text-emerald-700">Harga terendah</b>' : `+ Rp${(p.priceMin-lowestPrice).toLocaleString('id-ID')}`],
+    ['Rating', p => `<span class="text-amber-500">${starString(p.rating)}</span><br><b>${p.rating}/5</b>`],
+    ['Jumlah ulasan', p => `${p.reviews.length} ulasan`],
+    ['Lokasi', p => `<i class="fa-solid fa-location-dot mr-1 text-[#B45309]"></i>${p.city}`],
+    ['Jarak dari Anda', p => `${providerDistance(p).toFixed(1)} km`]
+  ];
+
+  container.innerHTML = `
+    ${selected.length < 2 ? `<div class="mb-5 p-4 rounded-2xl border border-amber-200 bg-amber-50 text-amber-800 text-sm"><i class="fa-solid fa-circle-info mr-1"></i> Tambahkan satu penyedia lagi dari kategori <b>${selected[0].category}</b> untuk mulai membandingkan.</div>` : ''}
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-5">
+      <div><b class="font-head text-lg block" style="color:#0F3D2E;">${selected[0].category}</b><span class="text-xs text-[#66716A]">${selected.length} dari 3 penyedia dipilih</span></div>
+      <button onclick="showPage('jasa')" class="px-4 py-2.5 rounded-full text-xs font-bold border border-[#DCE9E2] bg-white hover:bg-[#EAF5F0]"><i class="fa-solid fa-plus mr-1"></i> Tambah penyedia</button>
+    </div>
+    <div class="bg-white rounded-2xl border border-[#DCE9E2] shadow-lg overflow-x-auto">
+      <table class="compare-table w-full text-sm border-collapse">
+        <thead><tr><th class="p-4 text-left text-xs uppercase tracking-wide text-[#66716A]">Informasi</th>${columns}</tr></thead>
+        <tbody>
+          ${comparisonRows.map(([label,render]) => `<tr class="border-t border-[#DCE9E2]"><td class="p-4 font-bold text-xs text-[#3A453D]">${label}</td>${selected.map(p => `<td class="p-4 border-l border-[#DCE9E2] text-xs text-[#3A453D] ${p.priceMin === lowestPrice ? 'bg-emerald-50/40' : ''}">${render(p)}</td>`).join('')}</tr>`).join('')}
+          <tr class="border-t border-[#DCE9E2]"><td class="p-4 font-bold text-xs text-[#3A453D]">Tindakan</td>${selected.map(p => `<td class="p-4 border-l border-[#DCE9E2]"><button onclick="openProviderDetail(${p.id})" class="w-full py-2.5 rounded-full text-xs font-bold text-[#0F3D2E]" style="background:#FF9B21;">Lihat & pesan</button></td>`).join('')}</tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-[11px] text-[#66716A] mt-4"><i class="fa-solid fa-circle-info mr-1"></i> Harga merupakan estimasi awal. Total akhir dapat berubah setelah detail pekerjaan disepakati dengan penyedia.</p>`;
+  renderCompareDock();
+}
+function renderHomeProviders(){
+  const top = [...providers].sort((a,b) => b.rating - a.rating).slice(0,4);
+  document.getElementById('homeProviderGrid').innerHTML = top.map(providerCard).join('');
+  document.getElementById('statProviders').textContent = providers.length + '+';
+}
+function renderTestimonials(){
+  const byId = id => providers.find(p => p.id === id);
+  const picks = [
+    {p:byId(2), r:byId(2).reviews[0]},
+    {p:byId(1), r:byId(1).reviews[0]},
+    {p:byId(3), r:byId(3).reviews[0]}
+  ];
+  document.getElementById('testimonialGrid').innerHTML = picks.map(({p,r}) => `
+    <div class="bg-white border border-[#DCE9E2] rounded-2xl p-6">
+      <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold font-head" style="background:#0F3D2E; color:#FF9B21;">${r.name.charAt(0)}</div>
+        <div><div class="font-bold text-sm" style="color:#0F3D2E;">${r.name}</div><div class="text-xs text-[#66716A]">Pengguna jasa ${p.name}</div></div>
+      </div>
+      <div class="text-amber-500 text-xs mb-2">${starString(r.rating)}</div>
+      <p class="text-sm text-[#3A453D]">"${r.comment}"</p>
+    </div>`).join('');
+}
+
+/* ---------------------------------------------------------------------------------------
+   8. HALAMAN JASA: SEARCH, FILTER, SORT
+--------------------------------------------------------------------------------------- */
+function populateFilterOptions(){
+  const katSel = document.getElementById('filterKategori');
+  const kotaSel = document.getElementById('filterKota');
+  const kats = [...new Set(providers.map(p => p.category))];
+  const kotas = [...new Set(providers.map(p => p.city))];
+  katSel.innerHTML = '<option value="">Semua Kategori</option>' + kats.map(k => `<option value="${k}">${k}</option>`).join('');
+  kotaSel.innerHTML = '<option value="">Semua Kota</option>' + kotas.map(k => `<option value="${k}">${k}</option>`).join('');
+}
+function quickSort(type){ filterState.sort = type; document.getElementById('filterSort').value = type; showPage('jasa'); applyFilters(); }
+
+function goToCategory(cat){ showPage('jasa'); document.getElementById('filterKategori').value = cat; filterState.kategori = cat; applyFilters(); }
+
+function applyFilters(){
+  filterState.search = document.getElementById('searchInput').value.trim().toLowerCase();
+  filterState.kategori = document.getElementById('filterKategori').value;
+  filterState.kota = document.getElementById('filterKota').value;
+  filterState.sort = document.getElementById('filterSort').value;
+
+  let list = providers.filter(p => {
+    const matchSearch = !filterState.search || p.name.toLowerCase().includes(filterState.search) || p.desc.toLowerCase().includes(filterState.search);
+    const matchKategori = !filterState.kategori || p.category === filterState.kategori;
+    const matchKota = !filterState.kota || p.city === filterState.kota;
+    return matchSearch && matchKategori && matchKota;
+  });
+
+  if(filterState.sort === 'distance') list.sort((a,b) => providerDistance(a) - providerDistance(b));
+  else if(filterState.sort === 'harga-asc') list.sort((a,b) => a.priceMin - b.priceMin);
+  else if(filterState.sort === 'harga-desc') list.sort((a,b) => b.priceMin - a.priceMin);
+  else if(filterState.sort === 'rating') list.sort((a,b) => b.rating - a.rating);
+
+  document.getElementById('resultCount').textContent = list.length ? `Menampilkan ${list.length} jasa` : 'Tidak ada hasil';
+  const grid = document.getElementById('jasaGrid');
+  grid.innerHTML = list.length ? list.map(providerCard).join('') :
+    `<div class="col-span-full text-center py-16 text-[#66716A]"><i class="fa-solid fa-magnifying-glass text-3xl mb-3"></i><p>Tidak ada jasa yang cocok. Coba ubah kata kunci atau filter.</p></div>`;
+}
+
+/* ---------------------------------------------------------------------------------------
+   9. DETAIL PROVIDER & BOOKING
+--------------------------------------------------------------------------------------- */
+function openProviderDetail(id){
+  currentDetailId = id;
+  const p = providers.find(x => x.id === id);
+  const avg = (p.reviews.reduce((s,r) => s+r.rating,0)/p.reviews.length).toFixed(1);
+
+  document.getElementById('detailContent').innerHTML = `
+    <div class="rounded-3xl overflow-hidden shadow-xl mb-7 h-72"><img src="${p.photo}" class="w-full h-full object-cover" alt="${p.name}"></div>
+    <div class="grid lg:grid-cols-[1.6fr_1fr] gap-9">
+      <div>
+        <div class="flex flex-wrap justify-between items-start gap-4 mb-5">
+          <div>
+            <h1 class="font-head font-extrabold text-2xl mb-2" style="color:#0F3D2E;">${p.name}</h1>
+            <div class="flex flex-wrap gap-2">
+              <span class="text-xs font-bold px-3 py-1.5 rounded-full" style="background:#EAF5F0; color:#1B4D3E;">${p.category}</span>
+              <span class="text-xs font-bold px-3 py-1.5 rounded-full" style="background:#EAF5F0; color:#1B4D3E;"><i class="fa-solid fa-location-dot"></i> ${p.city}</span>
+              <span class="text-xs font-bold px-3 py-1.5 rounded-full" style="background:#EAF5F0; color:#1B4D3E;">${providerDistance(p).toFixed(1)} km dari lokasi</span>
+            </div>
+          </div>
+          <div class="text-center rounded-2xl px-5 py-3 text-white" style="background:#1B4D3E;">
+            <b class="font-head text-xl block">${avg}</b><span class="text-[10px] text-white/70">${p.reviews.length} ulasan</span>
+          </div>
+        </div>
+        <div class="mb-8"><h3 class="font-head font-bold text-base mb-2" style="color:#0F3D2E;">Tentang Penyedia Jasa</h3><p class="text-sm text-[#3A453D]">${p.desc}</p></div>
+        <div class="mb-8">
+          <h3 class="font-head font-bold text-base mb-3" style="color:#0F3D2E;">Portofolio</h3>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">${p.portfolio.map(src => `<img src="${src}" class="rounded-xl aspect-square object-cover hover:scale-105 transition" alt="Portofolio ${p.name}">`).join('')}</div>
+        </div>
+        <div>
+          <h3 class="font-head font-bold text-base mb-3" style="color:#0F3D2E;">Ulasan Pengguna</h3>
+          ${p.reviews.map(r => `
+            <div class="border-t border-[#DCE9E2] first:border-t-0 py-4">
+              <div class="flex items-center gap-3 mb-2">
+                <div class="w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs" style="background:#0F3D2E; color:#FF9B21;">${escapeReview(r.name.charAt(0))}</div>
+                <div><div class="font-bold text-sm" style="color:#0F3D2E;">${escapeReview(r.name)}</div><div class="text-amber-500 text-xs">${starString(r.rating)}</div></div>
+              </div>
+              <p class="text-sm text-[#3A453D]">"${escapeReview(r.comment)}"</p>
+            </div>`).join('')}
+        </div>
+      </div>
+      <div>
+        <div class="bg-white border border-[#DCE9E2] rounded-2xl p-5 mb-4">
+          <h4 class="font-head font-bold text-sm mb-4" style="color:#0F3D2E;">Ringkasan Jasa</h4>
+          <div class="flex justify-between text-sm py-2 border-b border-dashed border-[#DCE9E2]"><span class="text-[#66716A]">Kategori</span><b>${p.category}</b></div>
+          <div class="flex justify-between text-sm py-2 border-b border-dashed border-[#DCE9E2]"><span class="text-[#66716A]">Lokasi</span><b>${p.city}</b></div>
+          <div class="flex justify-between text-sm py-2 border-b border-dashed border-[#DCE9E2]"><span class="text-[#66716A]">Jarak dari Anda</span><b>${providerDistance(p).toFixed(1)} km</b></div>
+          <div class="flex justify-between text-sm py-2 border-b border-dashed border-[#DCE9E2]"><span class="text-[#66716A]">Harga</span><b>Rp${p.priceMin.toLocaleString('id-ID')} - Rp${p.priceMax.toLocaleString('id-ID')}</b></div>
+          <div class="flex justify-between text-sm py-2"><span class="text-[#66716A]">Rating</span><b>${p.rating} / 5</b></div>
+        </div>
+        <button onclick="openBookingModal(${p.id})" class="w-full py-3.5 rounded-full font-bold text-sm text-[#0F3D2E] hover:-translate-y-0.5 transition" style="background:#FF9B21;">
+          <i class="fa-solid fa-message mr-1"></i> Hubungi Penyedia
+        </button>
+        <button onclick="toggleCompare(${p.id})" class="w-full mt-3 py-3.5 rounded-full font-bold text-sm border transition ${compareIds.includes(p.id) ? 'text-[#0F3D2E] border-[#FF9B21] bg-[#FFF0DD]' : 'text-[#1B4D3E] border-[#1B4D3E] bg-white'}">
+          <i class="fa-solid ${compareIds.includes(p.id) ? 'fa-check' : 'fa-scale-balanced'} mr-1"></i> ${compareIds.includes(p.id) ? 'Sudah dipilih untuk dibandingkan' : 'Tambahkan ke perbandingan'}
+        </button>
+      </div>
+    </div>`;
+  showPage('detail');
+}
+
+function openBookingModal(providerId){
+  if(!currentUser){ showToast('Masuk terlebih dahulu untuk memesan jasa.'); openModal('modalMasuk'); return; }
+  if(currentUser.role !== 'customer'){ showToast('Hanya akun customer yang bisa memesan jasa.'); return; }
+  currentDetailId = providerId;
+  const p = providers.find(x => x.id === providerId);
+  document.getElementById('bookingProviderName').textContent = `${p.name} — ${p.category}`;
+  document.getElementById('bookingTotalPrice').textContent = 'Rp' + p.priceMin.toLocaleString('id-ID');
+  document.getElementById('bookingDate').value = '';
+  document.getElementById('bookingTime').value = '';
+  document.getElementById('bookingFeedback').textContent = '';
+  openModal('modalBooking');
+}
+
+function handleBookingSubmit(e){
+  e.preventDefault();
+  const p = providers.find(x => x.id === currentDetailId);
+  const date = document.getElementById('bookingDate').value;
+  const time = document.getElementById('bookingTime').value;
+
+  const newBooking = {
+    id: bookingIdCounter++, customerEmail: currentUser.email, providerId: p.id,
+    date, time, total: p.priceMin, status:'PENDING', rated:false, chat:[]
+  };
+  bookings.push(newBooking);
+  closeModal('modalBooking');
+  showToast('Pesanan berhasil dibuat! Kamu diarahkan ke ruang chat.');
+  currentChatBookingId = newBooking.id;
+  renderChat();
+  showPage('chat');
+}
+
+/* ---------------------------------------------------------------------------------------
+   10. CHAT SIMULASI REALTIME
+--------------------------------------------------------------------------------------- */
+function renderChat(){
+  const booking = bookings.find(b => b.id === currentChatBookingId);
+  const provider = providers.find(p => p.id === booking.providerId);
+  const customer = users.find(u => u.email === booking.customerEmail);
+
+  document.getElementById('chatHeader').innerHTML = `
+    <div class="w-10 h-10 rounded-full flex items-center justify-center font-bold" style="background:#FF9B21; color:#0F3D2E;">${provider.name.charAt(0)}</div>
+    <div><b class="block text-sm">${provider.name}</b><span class="text-xs text-white/70">Chat dengan ${customer.name} · Pesanan #${booking.id}</span></div>`;
+
+  renderChatMessages();
+}
+function renderChatMessages(){
+  const booking = bookings.find(b => b.id === currentChatBookingId);
+  const box = document.getElementById('chatMessages');
+  box.innerHTML = booking.chat.length ? booking.chat.map(m => `
+    <div class="flex ${m.sender==='customer' ? 'justify-end' : 'justify-start'}">
+      <div class="chat-bubble-${m.sender==='customer' ? 'out' : 'in'} rounded-2xl px-4 py-2.5 max-w-[75%] text-sm">
+        ${esc(m.text)}<div class="text-[10px] opacity-60 mt-1">${m.time}</div>
+      </div>
+    </div>`).join('') : `<div class="text-center text-sm text-[#66716A] my-auto">Belum ada pesan. Mulai percakapan di bawah ini.</div>`;
+  box.scrollTop = box.scrollHeight;
+}
+function nowTime(){ const d = new Date(); return d.getHours().toString().padStart(2,'0') + '.' + d.getMinutes().toString().padStart(2,'0'); }
+const autoReplies = [
+  'Baik, siap! Saya konfirmasi ya.',
+  'Ditunggu di lokasi sesuai jadwal ya, terima kasih!',
+  'Noted, akan saya usahakan sesuai permintaan.',
+  'Oke kak, sampai jumpa sesuai jadwal!',
+  'Terima kasih infonya, saya siapkan dulu ya.'
+];
+function sendChatMessage(e){
+  e.preventDefault();
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if(!text) return;
+  const booking = bookings.find(b => b.id === currentChatBookingId);
+  const mySender = (currentUser.role === 'customer') ? 'customer' : 'provider';
+  booking.chat.push({sender:mySender, text, time:nowTime()});
+  input.value = '';
+  renderChatMessages();
+
+  setTimeout(() => {
+    const otherSender = mySender === 'customer' ? 'provider' : 'customer';
+    const reply = autoReplies[Math.floor(Math.random()*autoReplies.length)];
+    booking.chat.push({sender:otherSender, text:reply, time:nowTime()});
+    renderChatMessages();
+  }, 900);
+}
+
+/* ---------------------------------------------------------------------------------------
+   11. DASHBOARD CUSTOMER + RATING
+--------------------------------------------------------------------------------------- */
+function renderCustomerDashboard(){
+  if(!currentUser) return;
+  const list = bookings.filter(b => b.customerEmail === currentUser.email).sort((a,b) => b.id - a.id);
+  const container = document.getElementById('customerBookingList');
+
+  container.innerHTML = list.length ? list.map(b => {
+    const p = providers.find(pr => pr.id === b.providerId);
+    const canRate = b.status === 'SELESAI' && !b.rated;
+    return `
+    <div class="bg-white border border-[#DCE9E2] rounded-2xl p-5 flex flex-wrap items-center gap-4 justify-between">
+      <div class="flex items-center gap-4">
+        <img src="${p.photo}" class="w-16 h-16 rounded-xl object-cover" alt="${p.name}">
+        <div>
+          <b class="block font-head text-sm" style="color:#0F3D2E;">${p.name}</b>
+          <span class="text-xs text-[#66716A]">${p.category} · ${b.date} ${b.time}</span>
+          <div class="mt-1"><span class="text-[11px] font-bold px-2.5 py-1 rounded-full ${STATUS_COLOR[b.status]}">${STATUS_LABEL[b.status]}</span></div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <b class="font-head text-sm" style="color:#1B4D3E;">Rp${b.total.toLocaleString('id-ID')}</b>
+        <button onclick="currentChatBookingId=${b.id}; renderChat(); showPage('chat');" class="px-4 py-2 rounded-full text-xs font-bold border border-[#DCE9E2] hover:bg-[#EAF5F0]"><i class="fa-solid fa-comment-dots"></i> Chat</button>
+        <button ${canRate ? `onclick="openRatingModal(${b.id})"` : 'disabled'} class="px-4 py-2 rounded-full text-xs font-bold text-white ${canRate ? 'hover:-translate-y-0.5 transition' : 'opacity-40 cursor-not-allowed'}" style="background:#FF9B21; color:#0F3D2E;">
+          <i class="fa-solid fa-star"></i> ${b.rated ? 'Sudah Dinilai' : 'Beri Rating'}
+        </button>
+      </div>
+    </div>`;
+  }).join('') : `<div class="text-center py-16 text-[#66716A]"><i class="fa-solid fa-box-open text-3xl mb-3"></i><p>Belum ada riwayat pesanan.</p></div>`;
+}
+
+function openRatingModal(bookingId){
+  currentRatingBookingId = bookingId;
+  const b = bookings.find(x => x.id === bookingId);
+  const p = providers.find(x => x.id === b.providerId);
+  document.getElementById('ratingProviderName').textContent = `Untuk pesanan di ${p.name}`;
+  document.getElementById('ratingUlasan').value = '';
+  selectedStars = 0;
+  renderStarPicker();
+  openModal('modalRating');
+}
+function renderStarPicker(){
+  document.getElementById('starPicker').innerHTML = [1,2,3,4,5].map(i => `
+    <button type="button" onclick="setStar(${i})" class="star-btn text-3xl ${i<=selectedStars ? 'text-amber-400' : 'text-gray-300'}"><i class="fa-solid fa-star"></i></button>`).join('');
+}
+function setStar(i){ selectedStars = i; renderStarPicker(); }
+function submitRating(e){
+  e.preventDefault();
+  if(selectedStars === 0){ showToast('Pilih jumlah bintang dulu ya.'); return; }
+  const b = bookings.find(x => x.id === currentRatingBookingId);
+  const p = providers.find(x => x.id === b.providerId);
+  const ulasan = document.getElementById('ratingUlasan').value.trim();
+
+  p.reviews.unshift({name: currentUser.name, rating: selectedStars, comment: ulasan});
+  p.rating = +(p.reviews.reduce((s,r) => s+r.rating,0) / p.reviews.length).toFixed(1);
+  b.rated = true;
+
+  closeModal('modalRating');
+  showToast('Terima kasih! Ulasanmu berhasil dikirim.');
+  renderCustomerDashboard();
+  renderHomeProviders();
+}
+
+/* ---------------------------------------------------------------------------------------
+   12. DASHBOARD ADMIN / MITRA (LIFECYCLE STATUS PESANAN)
+--------------------------------------------------------------------------------------- */
+function renderAdminDashboard(){
+  if(!currentUser) return;
+  const isAdmin = currentUser.role === 'admin';
+  document.getElementById('adminDashTitle').textContent = isAdmin ? 'Dashboard Admin' : 'Dashboard Mitra Jasa';
+  document.getElementById('adminDashSub').textContent = isAdmin
+    ? 'Kelola seluruh transaksi dari semua penyedia jasa dan perbarui status secara real-time.'
+    : 'Kelola pesanan yang masuk untuk layananmu dan perbarui status pengerjaan.';
+
+  let list;
+  if(isAdmin){
+    list = [...bookings];
+  } else {
+    const myProvider = providers.find(p => p.providerEmail === currentUser.email);
+    list = myProvider ? bookings.filter(b => b.providerId === myProvider.id) : [];
+  }
+  list.sort((a,b) => b.id - a.id);
+
+  document.getElementById('adminBookingTable').innerHTML = list.length ? list.map(b => {
+    const p = providers.find(pr => pr.id === b.providerId);
+    const cust = users.find(u => u.email === b.customerEmail);
+    const nextStatus = STATUS_FLOW[STATUS_FLOW.indexOf(b.status) + 1];
+    return `
+    <tr class="border-b border-[#EAF5F0] last:border-0">
+      <td class="py-4 px-5 font-medium">${cust ? cust.name : b.customerEmail}</td>
+      <td class="py-4 px-5">${p.name}</td>
+      <td class="py-4 px-5 text-[#66716A]">${b.date} · ${b.time}</td>
+      <td class="py-4 px-5 font-head font-bold" style="color:#1B4D3E;">Rp${b.total.toLocaleString('id-ID')}</td>
+      <td class="py-4 px-5"><span class="text-[11px] font-bold px-2.5 py-1 rounded-full ${STATUS_COLOR[b.status]}">${STATUS_LABEL[b.status]}</span></td>
+      <td class="py-4 px-5">
+        ${b.status === 'SELESAI' || b.status === 'CANCELLED' ? '<span class="text-xs text-[#66716A]">Tidak ada aksi</span>' : `
+        <select onchange="updateBookingStatus(${b.id}, this.value)" class="text-xs font-semibold border border-[#DCE9E2] rounded-lg px-2 py-1.5">
+          <option value="${b.status}" selected>${STATUS_LABEL[b.status]} (saat ini)</option>
+          ${nextStatus ? `<option value="${nextStatus}">Ubah ke: ${STATUS_LABEL[nextStatus]}</option>` : ''}
+          <option value="CANCELLED">Batalkan Pesanan</option>
+        </select>`}
+      </td>
+    </tr>`;
+  }).join('') : `<tr><td colspan="6" class="text-center py-14 text-[#66716A]">Belum ada transaksi untuk ditampilkan.</td></tr>`;
+}
+function updateBookingStatus(bookingId, newStatus){
+  const b = bookings.find(x => x.id === bookingId);
+  if(!b || newStatus === b.status) return;
+  b.status = newStatus;
+  showToast(`Status pesanan #${bookingId} diperbarui menjadi ${STATUS_LABEL[newStatus]}.`);
+  renderAdminDashboard();
+}
+
+/* ---------------------------------------------------------------------------------------
+   13. FAQ + FOOTER BANTUAN
+--------------------------------------------------------------------------------------- */
+function renderFAQ(){
+  document.getElementById('faqList').innerHTML = faqData.map((f,i) => `
+    <div class="bg-white border border-[#DCE9E2] rounded-xl overflow-hidden" id="faq-${i}">
+      <button onclick="toggleFAQ(${i})" class="w-full text-left px-5 py-4 font-bold text-sm flex justify-between items-center" style="color:#0F3D2E;">
+        ${f.q} <i class="fa-solid fa-plus text-[#B45309] faq-icon transition-transform"></i>
+      </button>
+      <div class="faq-answer hidden px-5 pb-4 text-sm text-[#3A453D]">${f.a}</div>
+    </div>`).join('');
+}
+function toggleFAQ(i){
+  const item = document.getElementById('faq-'+i);
+  const answer = item.querySelector('.faq-answer');
+  const icon = item.querySelector('.faq-icon');
+  const willOpen = answer.classList.contains('hidden');
+  document.querySelectorAll('#faqList > div').forEach(other => {
+    other.querySelector('.faq-answer').classList.add('hidden');
+    other.querySelector('.faq-icon').style.transform = 'rotate(0deg)';
+  });
+  if(willOpen){ answer.classList.remove('hidden'); icon.style.transform = 'rotate(45deg)'; }
+}
+function footerHelp(faqIndex){
+  showPage('bantuan');
+  setTimeout(() => {
+    document.querySelectorAll('.faq-answer').forEach(a => a.classList.add('hidden'));
+    const item = document.getElementById('faq-'+faqIndex);
+    if(item){ item.querySelector('.faq-answer').classList.remove('hidden'); item.scrollIntoView({behavior:'smooth', block:'center'}); }
+  }, 150);
+}
+
+/* ---------------------------------------------------------------------------------------
+   14. FORM BANTUAN
+--------------------------------------------------------------------------------------- */
+function submitBantuan(e){
+  e.preventDefault();
+  const nama = document.getElementById('bantuanNama').value.trim();
+  const deskripsi = document.getElementById('bantuanDeskripsi').value.trim();
+  const msg = document.getElementById('bantuanMsg');
+  if(!nama || !deskripsi){ msg.className = 'text-center text-sm font-semibold mt-3 text-red-600'; msg.textContent = 'Nama dan deskripsi wajib diisi.'; return; }
+  msg.className = 'text-center text-sm font-semibold mt-3'; msg.style.color = '#236B54';
+  msg.textContent = `Terima kasih, ${nama}. Pratinjau pertanyaanmu selesai; pesan belum dikirim.`;
+  e.target.reset();
+}
+
+/* ---------------------------------------------------------------------------------------
+   15. INISIALISASI
+--------------------------------------------------------------------------------------- */
+function init(){
+  updateNavbarAuthState();
+
+
+  renderCategories();
+  renderHomeProviders();
+  renderTestimonials();
+  populateFilterOptions();
+  applyFilters();
+  renderFAQ();
+  renderCompareDock();
+  showPage('beranda');
+}
+init();
+</script>
+<script src="/payments.js"></script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Logo Andallo</title>
+  <desc id="desc">Huruf A geometris dengan penanda lokasi</desc>
+  <defs>
+    <linearGradient id="a" x1="9" y1="7" x2="55" y2="57" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67E8F9"/>
+      <stop offset=".5" stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+    <linearGradient id="p" x1="31" y1="28" x2="31" y2="51" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E0F2FE"/>
+      <stop offset="1" stop-color="#7DD3FC"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#a)" d="M10.6 52.8a5 5 0 0 1-4.2-7.7L26.7 12a6.2 6.2 0 0 1 10.6 0l20.3 33.1a5 5 0 0 1-8.5 5.3L32 22.5 14.9 50.4a5 5 0 0 1-4.3 2.4Z"/>
+  <path fill="#071A38" d="M20.5 45.2h13.4l-4.1 7.6H16.2l4.3-7.6Z" opacity=".92"/>
+  <path fill="url(#p)" d="M41.6 32.4c0 7-9.6 17.2-9.6 17.2s-9.6-10.2-9.6-17.2a9.6 9.6 0 1 1 19.2 0Z"/>
+  <circle cx="32" cy="32.4" r="3.7" fill="#071A38"/>
+</svg>

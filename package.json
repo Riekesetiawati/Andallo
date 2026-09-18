@@ -1,0 +1,1 @@
+{"name":"andallo-mvp","private":true,"type":"module","scripts":{"build":"node build.mjs","test":"node --test workflow.test.mjs"}}
