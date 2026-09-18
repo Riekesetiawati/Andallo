@@ -1030,17 +1030,8 @@ function confirmVerification(){
 }
 
 function playWelcomeAnimation(){
-  const overlay = document.getElementById('welcomeOverlay');
-  const line = document.getElementById('welcomeLine');
-  const text = 'SELAMAT DATANG ANDALLERS, TEMUKAN JASA YANG KAMU CARI DISINI';
-  line.innerHTML = text.split(' ').map((w,i) => `<span style="animation-delay:${0.28 + i*0.07}s">${w}</span>`).join(' ');
-  overlay.classList.add('show');
-  setTimeout(() => {
-    overlay.classList.remove('show');
-    updateNavbarAuthState();
-    if(currentUser.role === 'customer') showPage('beranda');
-    else goToDashboard();
-  }, 2600);
+  updateNavbarAuthState();
+  goToDashboard();
 }
 
 /* ---------------------------------------------------------------------------------------
