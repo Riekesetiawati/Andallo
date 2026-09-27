@@ -1,0 +1,812 @@
+{
+  "users": [
+    {
+      "email": "rieke@andallo.com",
+      "password": "demo123",
+      "name": "Rieke Setiawati",
+      "role": "customer",
+      "phone": "6281234567890"
+    },
+    {
+      "email": "mitra@andallo.com",
+      "password": "demo123",
+      "name": "Bara Barbershop",
+      "role": "provider",
+      "providerId": 1,
+      "phone": "6281111111111"
+    },
+    {
+      "email": "admin@andallo.com",
+      "password": "demo123",
+      "name": "Admin Andallo",
+      "role": "admin",
+      "phone": "6281222222222"
+    }
+  ],
+  "providers": [
+    {
+      "id": 1,
+      "name": "Bara Barbershop",
+      "category": "Kecantikan & Perawatan",
+      "service": "Potong Rambut",
+      "city": "Bekasi Utara",
+      "price": 25000,
+      "rating": 4.3,
+      "reviews": 101,
+      "available": "Tersedia",
+      "lat": -6.2323,
+      "lng": 106.9796,
+      "image": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Potong Rambut profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": "mitra@andallo.com"
+    },
+    {
+      "id": 2,
+      "name": "Gentleman Cut",
+      "category": "Kecantikan & Perawatan",
+      "service": "Potong Rambut",
+      "city": "Bekasi Barat",
+      "price": 40000,
+      "rating": 4.4,
+      "reviews": 112,
+      "available": "Tersedia",
+      "lat": -6.2263,
+      "lng": 106.9706,
+      "image": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Potong Rambut profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 3,
+      "name": "Rapi Hair Studio",
+      "category": "Kecantikan & Perawatan",
+      "service": "Potong Rambut",
+      "city": "Bekasi Timur",
+      "price": 55000,
+      "rating": 4.5,
+      "reviews": 123,
+      "available": "Tersedia",
+      "lat": -6.2453,
+      "lng": 106.9846,
+      "image": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Potong Rambut profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 4,
+      "name": "Urban Barber",
+      "category": "Kecantikan & Perawatan",
+      "service": "Potong Rambut",
+      "city": "Jakarta Timur",
+      "price": 70000,
+      "rating": 4.6,
+      "reviews": 134,
+      "available": "Tersedia",
+      "lat": -6.2523,
+      "lng": 106.9646,
+      "image": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Potong Rambut profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 5,
+      "name": "Klasik Barbershop",
+      "category": "Kecantikan & Perawatan",
+      "service": "Potong Rambut",
+      "city": "Bekasi Selatan",
+      "price": 85000,
+      "rating": 4.7,
+      "reviews": 145,
+      "available": "Tersedia",
+      "lat": -6.2173,
+      "lng": 106.9896,
+      "image": "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Potong Rambut profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1503951914875-452162b0f3f1?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 6,
+      "name": "BersihPro",
+      "category": "Kebersihan & Rumah Tangga",
+      "service": "Cleaning Service Rumah",
+      "city": "Bekasi Utara",
+      "price": 45000,
+      "rating": 4.4,
+      "reviews": 156,
+      "available": "Tersedia",
+      "lat": -6.2315,
+      "lng": 106.9791,
+      "image": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Cleaning Service Rumah profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 7,
+      "name": "HomeShine",
+      "category": "Kebersihan & Rumah Tangga",
+      "service": "Cleaning Service Rumah",
+      "city": "Bekasi Barat",
+      "price": 60000,
+      "rating": 4.5,
+      "reviews": 167,
+      "available": "Tersedia",
+      "lat": -6.2255,
+      "lng": 106.9701,
+      "image": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Cleaning Service Rumah profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 8,
+      "name": "Rapih Clean",
+      "category": "Kebersihan & Rumah Tangga",
+      "service": "Cleaning Service Rumah",
+      "city": "Bekasi Timur",
+      "price": 75000,
+      "rating": 4.6,
+      "reviews": 178,
+      "available": "Tersedia",
+      "lat": -6.2445,
+      "lng": 106.9841,
+      "image": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Cleaning Service Rumah profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 9,
+      "name": "Kinclong Home",
+      "category": "Kebersihan & Rumah Tangga",
+      "service": "Cleaning Service Rumah",
+      "city": "Jakarta Timur",
+      "price": 90000,
+      "rating": 4.7,
+      "reviews": 189,
+      "available": "Tersedia",
+      "lat": -6.2515,
+      "lng": 106.9641,
+      "image": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Cleaning Service Rumah profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 10,
+      "name": "SapuPlus",
+      "category": "Kebersihan & Rumah Tangga",
+      "service": "Cleaning Service Rumah",
+      "city": "Bekasi Selatan",
+      "price": 105000,
+      "rating": 4.8,
+      "reviews": 200,
+      "available": "Tersedia",
+      "lat": -6.2165,
+      "lng": 106.9891,
+      "image": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Cleaning Service Rumah profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 11,
+      "name": "FixTech",
+      "category": "Teknisi & Perbaikan",
+      "service": "Servis Elektronik",
+      "city": "Bekasi Utara",
+      "price": 65000,
+      "rating": 4.5,
+      "reviews": 211,
+      "available": "Tersedia",
+      "lat": -6.2307,
+      "lng": 106.9786,
+      "image": "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Servis Elektronik profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 12,
+      "name": "ElektroCare",
+      "category": "Teknisi & Perbaikan",
+      "service": "Servis Elektronik",
+      "city": "Bekasi Barat",
+      "price": 80000,
+      "rating": 4.6,
+      "reviews": 222,
+      "available": "Tersedia",
+      "lat": -6.2247,
+      "lng": 106.9696,
+      "image": "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Servis Elektronik profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 13,
+      "name": "TeknoFix",
+      "category": "Teknisi & Perbaikan",
+      "service": "Servis Elektronik",
+      "city": "Bekasi Timur",
+      "price": 95000,
+      "rating": 4.7,
+      "reviews": 233,
+      "available": "Tersedia",
+      "lat": -6.2437,
+      "lng": 106.9836,
+      "image": "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Servis Elektronik profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 14,
+      "name": "Service Cepat",
+      "category": "Teknisi & Perbaikan",
+      "service": "Servis Elektronik",
+      "city": "Jakarta Timur",
+      "price": 110000,
+      "rating": 4.8,
+      "reviews": 244,
+      "available": "Tersedia",
+      "lat": -6.2507,
+      "lng": 106.9636,
+      "image": "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Servis Elektronik profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 15,
+      "name": "Andal Elektronik",
+      "category": "Teknisi & Perbaikan",
+      "service": "Servis Elektronik",
+      "city": "Bekasi Selatan",
+      "price": 125000,
+      "rating": 4.3,
+      "reviews": 255,
+      "available": "Tersedia",
+      "lat": -6.2157,
+      "lng": 106.9886,
+      "image": "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Servis Elektronik profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1588508065123-287b28e013da?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 16,
+      "name": "FitWithDio",
+      "category": "Kesehatan & Kebugaran",
+      "service": "Personal Trainer",
+      "city": "Bekasi Utara",
+      "price": 95000,
+      "rating": 4.6,
+      "reviews": 266,
+      "available": "Tersedia",
+      "lat": -6.2299,
+      "lng": 106.9781,
+      "image": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Personal Trainer profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 17,
+      "name": "MoveFit Coach",
+      "category": "Kesehatan & Kebugaran",
+      "service": "Personal Trainer",
+      "city": "Bekasi Barat",
+      "price": 110000,
+      "rating": 4.7,
+      "reviews": 277,
+      "available": "Tersedia",
+      "lat": -6.2239,
+      "lng": 106.9691,
+      "image": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Personal Trainer profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 18,
+      "name": "StrongHome PT",
+      "category": "Kesehatan & Kebugaran",
+      "service": "Personal Trainer",
+      "city": "Bekasi Timur",
+      "price": 125000,
+      "rating": 4.8,
+      "reviews": 288,
+      "available": "Tersedia",
+      "lat": -6.2429,
+      "lng": 106.9831,
+      "image": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Personal Trainer profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 19,
+      "name": "ActivePro",
+      "category": "Kesehatan & Kebugaran",
+      "service": "Personal Trainer",
+      "city": "Jakarta Timur",
+      "price": 140000,
+      "rating": 4.3,
+      "reviews": 299,
+      "available": "Tersedia",
+      "lat": -6.2499,
+      "lng": 106.9631,
+      "image": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Personal Trainer profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 20,
+      "name": "Coach Naufal",
+      "category": "Kesehatan & Kebugaran",
+      "service": "Personal Trainer",
+      "city": "Bekasi Selatan",
+      "price": 155000,
+      "rating": 4.4,
+      "reviews": 310,
+      "available": "Tersedia",
+      "lat": -6.2149,
+      "lng": 106.9881,
+      "image": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Personal Trainer profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 21,
+      "name": "Kak Naya English",
+      "category": "Kursus & Les",
+      "service": "Les Bahasa Inggris",
+      "city": "Bekasi Utara",
+      "price": 85000,
+      "rating": 4.7,
+      "reviews": 321,
+      "available": "Tersedia",
+      "lat": -6.2291,
+      "lng": 106.9776,
+      "image": "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Les Bahasa Inggris profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 22,
+      "name": "Bright English",
+      "category": "Kursus & Les",
+      "service": "Les Bahasa Inggris",
+      "city": "Bekasi Barat",
+      "price": 100000,
+      "rating": 4.8,
+      "reviews": 332,
+      "available": "Tersedia",
+      "lat": -6.2231,
+      "lng": 106.9686,
+      "image": "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Les Bahasa Inggris profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 23,
+      "name": "SpeakEasy Tutor",
+      "category": "Kursus & Les",
+      "service": "Les Bahasa Inggris",
+      "city": "Bekasi Timur",
+      "price": 115000,
+      "rating": 4.3,
+      "reviews": 343,
+      "available": "Tersedia",
+      "lat": -6.2421,
+      "lng": 106.9826,
+      "image": "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Les Bahasa Inggris profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 24,
+      "name": "English Corner",
+      "category": "Kursus & Les",
+      "service": "Les Bahasa Inggris",
+      "city": "Jakarta Timur",
+      "price": 130000,
+      "rating": 4.4,
+      "reviews": 354,
+      "available": "Tersedia",
+      "lat": -6.2491,
+      "lng": 106.9626,
+      "image": "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Les Bahasa Inggris profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 25,
+      "name": "Tutor Hana",
+      "category": "Kursus & Les",
+      "service": "Les Bahasa Inggris",
+      "city": "Bekasi Selatan",
+      "price": 145000,
+      "rating": 4.5,
+      "reviews": 365,
+      "available": "Tersedia",
+      "lat": -6.2141,
+      "lng": 106.9876,
+      "image": "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Les Bahasa Inggris profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 26,
+      "name": "AutoCare Mobile",
+      "category": "Otomotif",
+      "service": "Servis Mobil Panggilan",
+      "city": "Bekasi Utara",
+      "price": 145000,
+      "rating": 4.8,
+      "reviews": 376,
+      "available": "Tersedia",
+      "lat": -6.2283,
+      "lng": 106.9771,
+      "image": "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Servis Mobil Panggilan profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 27,
+      "name": "MobilSiap",
+      "category": "Otomotif",
+      "service": "Servis Mobil Panggilan",
+      "city": "Bekasi Barat",
+      "price": 160000,
+      "rating": 4.3,
+      "reviews": 387,
+      "available": "Tersedia",
+      "lat": -6.2223,
+      "lng": 106.9681,
+      "image": "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Servis Mobil Panggilan profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 28,
+      "name": "BengkelGo",
+      "category": "Otomotif",
+      "service": "Servis Mobil Panggilan",
+      "city": "Bekasi Timur",
+      "price": 175000,
+      "rating": 4.4,
+      "reviews": 398,
+      "available": "Tersedia",
+      "lat": -6.2413,
+      "lng": 106.9821,
+      "image": "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Servis Mobil Panggilan profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 29,
+      "name": "AutoFix Home",
+      "category": "Otomotif",
+      "service": "Servis Mobil Panggilan",
+      "city": "Jakarta Timur",
+      "price": 190000,
+      "rating": 4.5,
+      "reviews": 409,
+      "available": "Tersedia",
+      "lat": -6.2483,
+      "lng": 106.9621,
+      "image": "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Servis Mobil Panggilan profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 30,
+      "name": "Mekanik Cepat",
+      "category": "Otomotif",
+      "service": "Servis Mobil Panggilan",
+      "city": "Bekasi Selatan",
+      "price": 205000,
+      "rating": 4.6,
+      "reviews": 420,
+      "available": "Tersedia",
+      "lat": -6.2133,
+      "lng": 106.9871,
+      "image": "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Servis Mobil Panggilan profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1487754180451-c456f719a1fc?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 31,
+      "name": "PixelKita Photo",
+      "category": "Desain & Kreatif",
+      "service": "Fotografer",
+      "city": "Bekasi Utara",
+      "price": 210000,
+      "rating": 4.3,
+      "reviews": 431,
+      "available": "Tersedia",
+      "lat": -6.2275,
+      "lng": 106.9766,
+      "image": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Fotografer profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 32,
+      "name": "Lensa Cerita",
+      "category": "Desain & Kreatif",
+      "service": "Fotografer",
+      "city": "Bekasi Barat",
+      "price": 225000,
+      "rating": 4.4,
+      "reviews": 442,
+      "available": "Tersedia",
+      "lat": -6.2215,
+      "lng": 106.9676,
+      "image": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Fotografer profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 33,
+      "name": "Frame Studio",
+      "category": "Desain & Kreatif",
+      "service": "Fotografer",
+      "city": "Bekasi Timur",
+      "price": 240000,
+      "rating": 4.5,
+      "reviews": 453,
+      "available": "Tersedia",
+      "lat": -6.2405,
+      "lng": 106.9816,
+      "image": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Fotografer profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 34,
+      "name": "Momentary Photo",
+      "category": "Desain & Kreatif",
+      "service": "Fotografer",
+      "city": "Jakarta Timur",
+      "price": 255000,
+      "rating": 4.6,
+      "reviews": 464,
+      "available": "Tersedia",
+      "lat": -6.2475,
+      "lng": 106.9616,
+      "image": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Fotografer profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    },
+    {
+      "id": 35,
+      "name": "Candid House",
+      "category": "Desain & Kreatif",
+      "service": "Fotografer",
+      "city": "Bekasi Selatan",
+      "price": 270000,
+      "rating": 4.7,
+      "reviews": 475,
+      "available": "Tersedia",
+      "lat": -6.2125,
+      "lng": 106.9866,
+      "image": "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=80",
+      "desc": "Fotografer profesional dengan layanan terverifikasi Andallo, harga transparan, dan dukungan pemesanan berbasis lokasi.",
+      "portfolio": [
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?auto=format&fit=crop&w=1000&q=80"
+      ],
+      "providerEmail": null
+    }
+  ],
+  "bookings": [
+    {
+      "id": 1001,
+      "customerEmail": "rieke@andallo.com",
+      "providerId": 1,
+      "date": "2026-09-18",
+      "time": "10:00",
+      "total": 25000,
+      "status": "ACCEPTED",
+      "approvalStatus": "ACCEPTED",
+      "approvalExpiresAt": null,
+      "rated": false,
+      "note": "Potong rambut rapi",
+      "chat": [
+        {
+          "id": 1,
+          "sender": "ai",
+          "text": "Halo! Saya AI Andallo. Saya bisa bantu soal jadwal, status pesanan, pembayaran, dan live tracking.",
+          "createdAt": "2026-09-14T10:00:00.000Z"
+        }
+      ],
+      "createdAt": "2026-09-14T10:00:00.000Z",
+      "providerPos": {
+        "lat": -6.2323,
+        "lng": 106.9796
+      },
+      "destination": {
+        "lat": -6.2383,
+        "lng": 106.9756
+      }
+    },
+    {
+      "id": 1002,
+      "customerEmail": "rieke@andallo.com",
+      "providerId": 1,
+      "date": "2026-09-20",
+      "time": "14:00",
+      "total": 25000,
+      "status": "SELESAI",
+      "approvalStatus": "ACCEPTED",
+      "approvalExpiresAt": null,
+      "rated": false,
+      "note": "Booking selesai",
+      "chat": [],
+      "createdAt": "2026-09-10T10:00:00.000Z",
+      "providerPos": {
+        "lat": -6.2383,
+        "lng": 106.9756
+      },
+      "destination": {
+        "lat": -6.2383,
+        "lng": 106.9756
+      }
+    }
+  ],
+  "locations": [],
+  "notifications": [],
+  "supportChats": [],
+  "aiKnowledge": [
+    {
+      "keywords": [
+        "jadwal",
+        "tanggal",
+        "slot",
+        "tersedia"
+      ],
+      "answer": "Jadwal yang sudah memiliki pesanan aktif akan ditandai merah dan tidak dapat dipilih. Pilih tanggal lain yang masih tersedia."
+    },
+    {
+      "keywords": [
+        "persetujuan",
+        "diterima",
+        "2 menit",
+        "menunggu"
+      ],
+      "answer": "Setelah booking dibuat, penyedia memiliki waktu maksimal 2 menit untuk menerima atau menolak. Jika tidak ada respons, pesanan otomatis kedaluwarsa dan kamu perlu memilih jadwal lain."
+    },
+    {
+      "keywords": [
+        "lokasi",
+        "tracking",
+        "gps",
+        "peta"
+      ],
+      "answer": "Live tracking aktif setelah pesanan diterima. Customer dan penyedia perlu mengizinkan akses lokasi perangkat agar marker pada peta dapat diperbarui."
+    },
+    {
+      "keywords": [
+        "bayar",
+        "pembayaran",
+        "harga"
+      ],
+      "answer": "Harga yang tampil adalah harga layanan pada penyedia tersebut. Untuk demo ini pembayaran belum terhubung payment gateway."
+    },
+    {
+      "keywords": [
+        "whatsapp",
+        "wa",
+        "notifikasi"
+      ],
+      "answer": "Notifikasi WhatsApp dapat dikirim melalui WhatsApp Cloud API jika kredensial server sudah dikonfigurasi. Tanpa kredensial, notifikasi tetap muncul real-time di dashboard."
+    },
+    {
+      "keywords": [
+        "rating",
+        "ulasan",
+        "bintang"
+      ],
+      "answer": "Rating 1\u20135 hanya aktif setelah status pesanan SELESAI."
+    },
+    {
+      "keywords": [
+        "batal",
+        "cancel",
+        "tolak"
+      ],
+      "answer": "Pesanan yang ditolak atau kedaluwarsa tidak mengunci tanggal lagi. Customer bisa memilih ulang penyedia atau tanggal lain."
+    }
+  ]
+}
