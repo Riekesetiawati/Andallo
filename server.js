@@ -2,64 +2,20 @@ import http from 'node:http';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
-import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { hashPassword, verifyPassword, signSession, readSession, sha256, randomToken } from './lib/auth.js';
+import { createStore, defaultDbFile } from './lib/store.js';
+import { createData } from './lib/data.js';
+import { DomainError } from './lib/errors.js';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(ROOT, 'public');
-const SESSION_SECRET_FALLBACK = 'andallo-demo-session-secret';
-
-const APPROVAL_WINDOW_MS = 2 * 60 * 1000;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
-const MAX_BODY_BYTES = 100 * 1024;
+const RESET_TTL_MS = 30 * 60 * 1000;
+const MAX_BODY_BYTES = 200 * 1024;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
-const MAX_NOTIFICATIONS = 500;
-const MAX_CHAT_MESSAGES = 200;
-const DEFAULT_ORIGIN = { lat: -6.2383, lng: 106.9756 };
-
-const STATUS = {
-  PENDING: 'PENDING',
-  ACCEPTED: 'ACCEPTED',
-  ON_THE_WAY: 'ON_THE_WAY',
-  IN_PROGRESS: 'IN_PROGRESS',
-  DONE: 'SELESAI',
-  REJECTED: 'REJECTED',
-  EXPIRED: 'EXPIRED',
-  CANCELLED: 'CANCELLED',
-};
-const ACTIVE_STATUSES = new Set([STATUS.PENDING, STATUS.ACCEPTED, STATUS.ON_THE_WAY, STATUS.IN_PROGRESS]);
-const TRACKABLE_STATUSES = new Set([STATUS.ACCEPTED, STATUS.ON_THE_WAY, STATUS.IN_PROGRESS]);
-const PROVIDER_TRANSITIONS = {
-  [STATUS.ACCEPTED]: STATUS.ON_THE_WAY,
-  [STATUS.ON_THE_WAY]: STATUS.IN_PROGRESS,
-  [STATUS.IN_PROGRESS]: STATUS.DONE,
-};
-const STATUS_LABEL = {
-  PENDING: 'Menunggu persetujuan',
-  ACCEPTED: 'Diterima',
-  ON_THE_WAY: 'Dalam perjalanan',
-  IN_PROGRESS: 'Sedang dikerjakan',
-  SELESAI: 'Selesai',
-  REJECTED: 'Ditolak',
-  EXPIRED: 'Kedaluwarsa',
-  CANCELLED: 'Dibatalkan',
-};
-
-const DEFAULT_CHAT_TEMPLATES = {
-  customer: [
-    'Apakah pesanan saya sudah dikonfirmasi?',
-    'Sudah sampai mana?',
-    'Berapa lama lagi sampai?',
-    'Saya sudah di lokasi.',
-  ],
-  provider: [
-    'Pesanan sudah saya terima, terima kasih.',
-    'Saya sedang dalam perjalanan.',
-    'Sekitar 15 menit lagi sampai.',
-    'Saya sudah tiba di lokasi.',
-  ],
-};
+const SESSION_SECRET_FALLBACK = 'andallo-demo-session-secret';
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -78,148 +34,6 @@ class HttpError extends Error {
     super(message);
     this.status = status;
   }
-}
-
-// ---------- password hashing ----------
-
-export function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex');
-  return `scrypt$${salt}$${hash}`;
-}
-
-export function verifyPassword(password, stored) {
-  if (typeof stored !== 'string' || !stored.startsWith('scrypt$')) return false;
-  const [, salt, hash] = stored.split('$');
-  const expected = Buffer.from(hash, 'hex');
-  const actual = crypto.scryptSync(String(password), salt, expected.length);
-  return crypto.timingSafeEqual(expected, actual);
-}
-
-// ---------- JSON file store ----------
-
-function createStore(file) {
-  let data;
-  let writeChain = Promise.resolve();
-
-  function load() {
-    data = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return migrate();
-  }
-
-  // Brings older db.json files (plaintext passwords, missing collections) up to the current shape.
-  function migrate() {
-    let changed = false;
-    for (const key of ['users', 'providers', 'bookings', 'locations', 'notifications', 'supportChats', 'aiKnowledge']) {
-      if (!Array.isArray(data[key])) {
-        data[key] = [];
-        changed = true;
-      }
-    }
-    if (!data.chatTemplates) {
-      data.chatTemplates = DEFAULT_CHAT_TEMPLATES;
-      changed = true;
-    }
-    for (const user of data.users) {
-      if (typeof user.password === 'string') {
-        user.passwordHash = hashPassword(user.password);
-        delete user.password;
-        changed = true;
-      }
-    }
-    for (const booking of data.bookings) {
-      if (!Array.isArray(booking.chat)) {
-        booking.chat = [];
-        changed = true;
-      }
-    }
-    return changed;
-  }
-
-  function save() {
-    const snapshot = JSON.stringify(data, null, 2) + '\n';
-    const tmp = `${file}.${process.pid}.tmp`;
-    writeChain = writeChain
-      .then(async () => {
-        await fsp.writeFile(tmp, snapshot);
-        await fsp.rename(tmp, file);
-      })
-      .catch((err) => console.error('[db] write failed:', err));
-    return writeChain;
-  }
-
-  const changed = load();
-  if (changed) save();
-
-  return {
-    get data() {
-      return data;
-    },
-    save,
-    flush: () => writeChain,
-  };
-}
-
-// ---------- helpers ----------
-
-function haversineKm(a, b) {
-  const toRad = (d) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * 6371 * Math.asin(Math.sqrt(h));
-}
-
-function isLatLng(p) {
-  return (
-    p &&
-    Number.isFinite(p.lat) &&
-    Number.isFinite(p.lng) &&
-    Math.abs(p.lat) <= 90 &&
-    Math.abs(p.lng) <= 180
-  );
-}
-
-function cleanText(value, max) {
-  if (typeof value !== 'string') return '';
-  return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').trim().slice(0, max);
-}
-
-function todayIso() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function publicUser(user) {
-  if (!user) return null;
-  const { passwordHash, password, ...rest } = user;
-  return rest;
-}
-
-function nextId(items, start = 1) {
-  return items.reduce((max, item) => Math.max(max, Number(item.id) || 0), start - 1) + 1;
-}
-
-// The bundled seed is traced from a few locations because Vercel places
-// included files at the project root, not next to the compiled function.
-function seedDbPath() {
-  const candidates = [
-    path.join(ROOT, 'data', 'db.json'),
-    path.join(process.cwd(), 'data', 'db.json'),
-    path.join(ROOT, '..', 'data', 'db.json'),
-  ];
-  const found = candidates.find((p) => fs.existsSync(p));
-  if (!found) throw new Error('data/db.json tidak ditemukan di paket deployment.');
-  return found;
-}
-
-export function defaultDbFile(env = process.env) {
-  if (env.DB_FILE) return path.resolve(env.DB_FILE);
-  if (env.VERCEL) {
-    const tmp = env.VERCEL_DB_FILE || path.join('/tmp', 'andallo-db.json');
-    if (!fs.existsSync(tmp)) fs.copyFileSync(seedDbPath(), tmp);
-    return tmp;
-  }
-  return path.join(ROOT, 'data', 'db.json');
 }
 
 function readBody(req) {
@@ -282,531 +96,304 @@ function securityHeaders(res) {
   res.setHeader('Permissions-Policy', 'geolocation=(self)');
 }
 
-// ---------- WhatsApp Cloud API ----------
-
-function createWhatsApp(env) {
-  const token = env.WHATSAPP_TOKEN;
-  const phoneId = env.WHATSAPP_PHONE_NUMBER_ID;
-  const version = env.WHATSAPP_API_VERSION || 'v20.0';
-  const enabled = Boolean(token && phoneId);
-
-  return {
-    enabled,
-    async send(to, body) {
-      if (!enabled || !to) return { sent: false, reason: 'disabled' };
-      try {
-        const res = await fetch(`https://graph.facebook.com/${version}/${phoneId}/messages`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body } }),
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!res.ok) console.warn('[whatsapp] send failed:', res.status, await res.text());
-        return { sent: res.ok };
-      } catch (err) {
-        console.warn('[whatsapp] send error:', err.message);
-        return { sent: false, reason: err.message };
-      }
-    },
-  };
+function queryNumber(value) {
+  if (value == null || value === '') return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
 }
 
-// ---------- application ----------
+export { defaultDbFile, hashPassword, verifyPassword };
 
 export function createApp({ dbFile, env = process.env, background = true } = {}) {
   const store = createStore(dbFile || defaultDbFile(env));
-  const whatsapp = createWhatsApp(env);
-  const loginFailures = new Map();
-  const sseClients = new Map();
+  const data = createData(store.data);
   const secret = env.SESSION_SECRET || SESSION_SECRET_FALLBACK;
+  const loginFailures = new Map();
+  if (!env.SESSION_SECRET) console.warn('[andallo] SESSION_SECRET belum diisi. Token sesi memakai kunci demo.');
 
   const db = () => store.data;
-  const findUser = (email) => db().users.find((u) => u.email === email);
-  const findProvider = (id) => db().providers.find((p) => p.id === Number(id));
-  const providerUsers = (providerId) => db().users.filter((u) => u.role === 'provider' && u.providerId === providerId);
-  const admins = () => db().users.filter((u) => u.role === 'admin');
 
-  // ----- sessions -----
-
-  // Tokens are signed so any serverless instance can verify them without shared memory.
-  function createSession(email) {
-    const payload = Buffer.from(JSON.stringify({ email, exp: Date.now() + SESSION_TTL_MS })).toString('base64url');
-    const sig = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
-    return `${payload}.${sig}`;
+  function tokenFrom(req, url) {
+    const header = req.headers.authorization || '';
+    if (header.startsWith('Bearer ')) return header.slice(7);
+    return url.searchParams.get('token');
   }
 
-  function tokenHash(token) {
-    return crypto.createHash('sha256').update(token).digest('hex');
+  function userFromToken(token) {
+    const session = readSession(token, secret);
+    if (!session) return null;
+    if (db().revokedTokens?.includes(sha256(token))) return null;
+    return data.findUserByEmail(session.email);
   }
 
-  function revokeToken(token) {
+  function resolveUser(req, url, auth) {
+    if (!auth) return null;
+    const user = userFromToken(tokenFrom(req, url));
+    if (!user) {
+      if (auth === 'optional') return null;
+      throw new HttpError(401, 'Silakan masuk terlebih dahulu.');
+    }
+    if (auth === 'admin' && user.role !== 'admin') throw new HttpError(403, 'Akses ini khusus admin.');
+    if (auth === 'customer' && user.role !== 'customer') throw new HttpError(403, 'Fitur ini khusus pelanggan.');
+    return user;
+  }
+
+  function revoke(token) {
     if (!token) return;
     if (!Array.isArray(db().revokedTokens)) db().revokedTokens = [];
-    const hash = tokenHash(token);
+    const hash = sha256(token);
     if (!db().revokedTokens.includes(hash)) db().revokedTokens.push(hash);
     if (db().revokedTokens.length > 500) db().revokedTokens.splice(0, db().revokedTokens.length - 500);
     store.save();
   }
 
-  function userFromToken(token) {
-    if (!token || typeof token !== 'string') return null;
-    const dot = token.lastIndexOf('.');
-    if (dot <= 0) return null;
-    const payload = token.slice(0, dot);
-    const sig = token.slice(dot + 1);
-    const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
-    const actual = Buffer.from(sig);
-    const wanted = Buffer.from(expected);
-    if (actual.length !== wanted.length || !crypto.timingSafeEqual(actual, wanted)) return null;
-    if (db().revokedTokens?.includes(tokenHash(token))) return null;
-    let data;
-    try {
-      data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
-    } catch {
-      return null;
-    }
-    if (!data?.email || typeof data.exp !== 'number' || data.exp < Date.now()) return null;
-    return findUser(data.email) || null;
-  }
-
-  function requireUser(req, url, ...roles) {
-    const header = req.headers.authorization || '';
-    const token = header.startsWith('Bearer ') ? header.slice(7) : url.searchParams.get('token');
-    const user = userFromToken(token);
-    if (!user) throw new HttpError(401, 'Silakan masuk terlebih dahulu.');
-    if (roles.length && !roles.includes(user.role)) throw new HttpError(403, 'Akses tidak diizinkan untuk peran ini.');
-    return user;
-  }
-
-  // ----- realtime (SSE) -----
-
-  function pushTo(emails, event, payload) {
-    const frame = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
-    for (const email of new Set(emails)) {
-      for (const res of sseClients.get(email) || []) res.write(frame);
-    }
-  }
-
-  function bookingAudience(booking) {
-    return [
-      booking.customerEmail,
-      ...providerUsers(booking.providerId).map((u) => u.email),
-      ...admins().map((u) => u.email),
-    ];
-  }
-
-  function notify(emails, { title, body, bookingId = null }) {
-    const list = db().notifications;
-    for (const email of new Set(emails)) {
-      const notification = {
-        id: nextId(list),
-        userEmail: email,
-        title,
-        body,
-        bookingId,
-        read: false,
-        createdAt: new Date().toISOString(),
-      };
-      list.push(notification);
-      pushTo([email], 'notification', notification);
-    }
-    if (list.length > MAX_NOTIFICATIONS) list.splice(0, list.length - MAX_NOTIFICATIONS);
-  }
-
-  // ----- booking helpers -----
-
-  function canAccessBooking(user, booking) {
-    if (user.role === 'admin') return true;
-    if (user.role === 'customer') return booking.customerEmail === user.email;
-    if (user.role === 'provider') return booking.providerId === user.providerId;
-    return false;
-  }
-
-  function serializeBooking(booking) {
-    const provider = findProvider(booking.providerId);
-    const customer = findUser(booking.customerEmail);
-    return {
-      ...booking,
-      statusLabel: STATUS_LABEL[booking.status] || booking.status,
-      provider: provider
-        ? { id: provider.id, name: provider.name, service: provider.service, city: provider.city, image: provider.image, lat: provider.lat, lng: provider.lng }
-        : null,
-      customer: customer ? { name: customer.name, email: customer.email } : null,
-    };
-  }
-
-  function getBookingFor(user, id) {
-    const booking = db().bookings.find((b) => b.id === Number(id));
-    if (!booking || !canAccessBooking(user, booking)) throw new HttpError(404, 'Pesanan tidak ditemukan.');
-    return booking;
-  }
-
-  function broadcastBooking(booking) {
-    pushTo(bookingAudience(booking), 'booking', serializeBooking(booking));
-  }
-
-  function expirePendingBookings() {
-    const now = Date.now();
-    let changed = false;
-    for (const booking of db().bookings) {
-      if (booking.status === STATUS.PENDING && booking.approvalExpiresAt && Date.parse(booking.approvalExpiresAt) <= now) {
-        booking.status = STATUS.EXPIRED;
-        booking.approvalStatus = STATUS.EXPIRED;
-        booking.approvalExpiresAt = null;
-        changed = true;
-        const provider = findProvider(booking.providerId);
-        notify(bookingAudience(booking), {
-          title: 'Pesanan kedaluwarsa',
-          body: `Pesanan #${booking.id} (${provider?.name ?? 'penyedia'}) tidak direspons dalam 2 menit. Silakan pilih jadwal atau penyedia lain.`,
-          bookingId: booking.id,
-        });
-        broadcastBooking(booking);
-      }
-    }
-    if (changed) store.save();
-  }
-
-  function bookedDates(providerId, excludeId = null) {
-    return [
-      ...new Set(
-        db()
-          .bookings.filter((b) => b.providerId === providerId && ACTIVE_STATUSES.has(b.status) && b.id !== excludeId)
-          .map((b) => b.date),
-      ),
-    ].sort();
-  }
-
-  function aiReply(text) {
-    const lower = text.toLowerCase();
-    const hit = db().aiKnowledge.find((k) => k.keywords.some((kw) => lower.includes(kw.toLowerCase())));
-    return hit?.answer ?? null;
-  }
-
-  // ----- routes -----
-
   const routes = [];
-  // `auth` omitted = public; [] = any signed-in user; ['admin', ...] = only those roles.
-  const route = (method, pattern, handler, { auth } = {}) => {
+  const route = (method, pattern, handler, auth) => {
     const keys = [];
-    const regex = new RegExp(
-      '^' + pattern.replace(/:(\w+)/g, (_, k) => (keys.push(k), '([^/]+)')) + '$',
-    );
+    const regex = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, key) => (keys.push(key), '([^/]+)')) + '$');
     routes.push({ method, regex, keys, handler, auth });
   };
 
-  route('GET', '/api/health', () => ({ ok: true, whatsapp: whatsapp.enabled ? 'enabled' : 'disabled' }));
+  route('GET', '/api/health', () => ({ ok: true, name: 'Andallo' }));
+  route('GET', '/api/settings', () => ({ settings: data.getSettings() }));
+  route('PUT', '/api/settings', ({ body }) => {
+    const settings = data.updateSettings(body);
+    store.save();
+    return { settings };
+  }, 'admin');
 
-  route('POST', '/api/auth/login', async ({ req, body }) => {
-    const email = cleanText(body.email, 200).toLowerCase();
+  route('POST', '/api/auth/register', ({ body }) => {
+    if (body.confirmPassword != null && body.confirmPassword !== body.password) {
+      throw new HttpError(400, 'Konfirmasi kata sandi tidak sama.');
+    }
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      throw new HttpError(400, 'Kata sandi minimal 8 karakter dan harus memuat huruf serta angka.');
+    }
+    const user = data.registerUser({ name: body.name, email: body.email, phone: body.phone, passwordHash: hashPassword(password) });
+    store.save();
+    return { status: 201, body: { token: signSession(user.email, secret, SESSION_TTL_MS), user } };
+  });
+
+  route('POST', '/api/auth/login', ({ req, body }) => {
+    const email = String(body.email || '').trim().toLowerCase();
     const password = typeof body.password === 'string' ? body.password : '';
     if (!email || !password) throw new HttpError(400, 'Email dan kata sandi wajib diisi.');
-
-    const key = `${req.socket.remoteAddress}|${email}`;
+    const key = `${req.socket?.remoteAddress || 'local'}|${email}`;
     const record = loginFailures.get(key);
     if (record && record.count >= LOGIN_MAX_FAILURES && Date.now() - record.first < LOGIN_WINDOW_MS) {
       throw new HttpError(429, 'Terlalu banyak percobaan masuk. Coba lagi dalam 15 menit.');
     }
-
-    const user = findUser(email);
+    const user = data.findUserByEmail(email);
     if (!user || !verifyPassword(password, user.passwordHash)) {
       const fresh = !record || Date.now() - record.first >= LOGIN_WINDOW_MS;
       loginFailures.set(key, fresh ? { count: 1, first: Date.now() } : { ...record, count: record.count + 1 });
       throw new HttpError(401, 'Email atau kata sandi salah.');
     }
     loginFailures.delete(key);
-    return { token: createSession(user.email), user: publicUser(user) };
+    return { token: signSession(user.email, secret, SESSION_TTL_MS), user: data.publicUser(user) };
   });
 
   route('POST', '/api/auth/logout', ({ req }) => {
     const header = req.headers.authorization || '';
-    if (header.startsWith('Bearer ')) revokeToken(header.slice(7));
+    if (header.startsWith('Bearer ')) revoke(header.slice(7));
     return { ok: true };
   });
 
-  route('GET', '/api/me', ({ user }) => ({ user: publicUser(user) }), { auth: [] });
-
-  route('GET', '/api/categories', () => ({
-    categories: [...new Set(db().providers.map((p) => p.category))].sort(),
-  }));
-
-  route('GET', '/api/providers', ({ url }) => {
-    const q = cleanText(url.searchParams.get('q'), 100).toLowerCase();
-    const category = cleanText(url.searchParams.get('category'), 100);
-    const sort = url.searchParams.get('sort') || 'distance';
-    const lat = Number.parseFloat(url.searchParams.get('lat'));
-    const lng = Number.parseFloat(url.searchParams.get('lng'));
-    const origin = isLatLng({ lat, lng }) ? { lat, lng } : DEFAULT_ORIGIN;
-
-    let list = db().providers.map(({ providerEmail, ...p }) => ({
-      ...p,
-      distanceKm: Math.round(haversineKm(origin, p) * 10) / 10,
-    }));
-    if (category) list = list.filter((p) => p.category === category);
-    if (q) {
-      list = list.filter((p) => [p.name, p.service, p.city, p.category].some((f) => f.toLowerCase().includes(q)));
-    }
-    const sorters = {
-      distance: (a, b) => a.distanceKm - b.distanceKm,
-      price_asc: (a, b) => a.price - b.price,
-      price_desc: (a, b) => b.price - a.price,
-      rating: (a, b) => b.rating - a.rating || b.reviews - a.reviews,
-    };
-    list.sort(sorters[sort] || sorters.distance);
-    return { origin, providers: list };
+  route('POST', '/api/auth/forgot', ({ body }) => {
+    const email = String(body.email || '').trim().toLowerCase();
+    const user = data.findUserByEmail(email);
+    const payload = { ok: true, message: 'Jika email terdaftar, tautan atur ulang kata sandi sudah dibuat.' };
+    if (!user) return payload;
+    const token = randomToken();
+    db().resetTokens = (db().resetTokens || []).filter((item) => item.userId !== user.id);
+    db().resetTokens.push({ tokenHash: sha256(token), userId: user.id, expiresAt: Date.now() + RESET_TTL_MS });
+    store.save();
+    if (env.EMAIL_DELIVERY !== 'external') payload.demoResetPath = `/#/atur-sandi?token=${token}`;
+    return payload;
   });
 
-  route('GET', '/api/providers/:id', ({ params }) => {
-    const provider = findProvider(params.id);
-    if (!provider) throw new HttpError(404, 'Penyedia tidak ditemukan.');
-    const { providerEmail, ...rest } = provider;
-    return { provider: rest, bookedDates: bookedDates(provider.id) };
+  route('POST', '/api/auth/reset', ({ body }) => {
+    const token = typeof body.token === 'string' ? body.token : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      throw new HttpError(400, 'Kata sandi minimal 8 karakter dan harus memuat huruf serta angka.');
+    }
+    const row = (db().resetTokens || []).find((item) => item.tokenHash === sha256(token) && item.expiresAt > Date.now());
+    if (!row) throw new HttpError(400, 'Tautan reset tidak berlaku atau sudah kedaluwarsa.');
+    const user = data.findUserById(row.userId);
+    if (!user) throw new HttpError(400, 'Akun tidak ditemukan.');
+    user.passwordHash = hashPassword(password);
+    db().resetTokens = db().resetTokens.filter((item) => item !== row);
+    store.save();
+    return { ok: true, message: 'Kata sandi berhasil diperbarui. Silakan masuk.' };
   });
 
-  route('GET', '/api/providers/:id/booked-dates', ({ params }) => {
-    const provider = findProvider(params.id);
-    if (!provider) throw new HttpError(404, 'Penyedia tidak ditemukan.');
-    return { bookedDates: bookedDates(provider.id) };
-  });
-
-  route('GET', '/api/chat-templates', ({ user }) => ({
-    templates: user.role === 'customer' ? db().chatTemplates.customer : db().chatTemplates.provider,
-  }), { auth: [] });
-
-  route('GET', '/api/bookings', ({ user }) => {
-    const list = db()
-      .bookings.filter((b) => canAccessBooking(user, b))
-      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-      .map(serializeBooking);
-    return { bookings: list };
-  }, { auth: [] });
-
-  route('GET', '/api/bookings/:id', ({ user, params }) => ({ booking: serializeBooking(getBookingFor(user, params.id)) }), { auth: [] });
-
-  route('POST', '/api/bookings', ({ user, body }) => {
-    const provider = findProvider(body.providerId);
-    if (!provider) throw new HttpError(404, 'Penyedia tidak ditemukan.');
-    const date = typeof body.date === 'string' ? body.date : '';
-    const time = typeof body.time === 'string' ? body.time : '';
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date))) throw new HttpError(400, 'Tanggal tidak valid.');
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) throw new HttpError(400, 'Jam tidak valid.');
-    if (date < todayIso()) throw new HttpError(400, 'Tanggal tidak boleh di masa lalu.');
-    if (bookedDates(provider.id).includes(date)) {
-      throw new HttpError(409, 'Tanggal ini sudah terisi. Silakan pilih tanggal lain.');
-    }
-    const destination = isLatLng(body.destination) ? { lat: body.destination.lat, lng: body.destination.lng } : { ...DEFAULT_ORIGIN };
-
-    const booking = {
-      id: nextId(db().bookings, 1001),
-      customerEmail: user.email,
-      providerId: provider.id,
-      date,
-      time,
-      total: provider.price,
-      status: STATUS.PENDING,
-      approvalStatus: STATUS.PENDING,
-      approvalExpiresAt: new Date(Date.now() + APPROVAL_WINDOW_MS).toISOString(),
-      rated: false,
-      note: cleanText(body.note, 500),
-      chat: [],
-      createdAt: new Date().toISOString(),
-      providerPos: { lat: provider.lat, lng: provider.lng },
-      destination,
-      customerPos: null,
-    };
-    db().bookings.push(booking);
-
-    const providerRecipients = [...providerUsers(provider.id), ...admins()].map((u) => u.email);
-    notify(providerRecipients, {
-      title: 'Pesanan baru',
-      body: `${user.name} memesan ${provider.service} pada ${date} ${time}. Respons dalam 2 menit.`,
-      bookingId: booking.id,
-    });
-    notify([user.email], {
-      title: 'Pesanan terkirim',
-      body: `Menunggu ${provider.name} menerima pesanan #${booking.id} (maksimal 2 menit).`,
-      bookingId: booking.id,
-    });
-    for (const u of providerUsers(provider.id)) {
-      whatsapp.send(u.phone, `Andallo: pesanan baru #${booking.id} dari ${user.name} untuk ${date} ${time}. Buka dashboard untuk menerima/menolak dalam 2 menit.`);
-    }
-    broadcastBooking(booking);
+  route('GET', '/api/me', ({ user }) => ({ user: data.publicUser(user) }), 'user');
+  route('PUT', '/api/me', ({ user, body }) => {
+    const profile = data.updateProfile(user, body);
     store.save();
-    return { status: 201, body: { booking: serializeBooking(booking) } };
-  }, { auth: ['customer'] });
-
-  route('POST', '/api/bookings/:id/decision', ({ user, params, body }) => {
-    const booking = getBookingFor(user, params.id);
-    const decision = body.decision;
-    if (!['accept', 'reject'].includes(decision)) throw new HttpError(400, 'Keputusan harus "accept" atau "reject".');
-    expirePendingBookings();
-    if (booking.status !== STATUS.PENDING) {
-      throw new HttpError(409, `Pesanan sudah berstatus ${STATUS_LABEL[booking.status] || booking.status}.`);
+    return { user: profile };
+  }, 'user');
+  route('PUT', '/api/me/password', ({ user, body }) => {
+    const current = data.findUserById(user.id);
+    if (!verifyPassword(body.currentPassword || '', current.passwordHash)) throw new HttpError(400, 'Kata sandi saat ini salah.');
+    const password = typeof body.password === 'string' ? body.password : '';
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      throw new HttpError(400, 'Kata sandi baru minimal 8 karakter dan harus memuat huruf serta angka.');
     }
-    const accepted = decision === 'accept';
-    booking.status = accepted ? STATUS.ACCEPTED : STATUS.REJECTED;
-    booking.approvalStatus = booking.status;
-    booking.approvalExpiresAt = null;
-    booking.decidedBy = user.email;
-    booking.decidedAt = new Date().toISOString();
-
-    const provider = findProvider(booking.providerId);
-    const customer = findUser(booking.customerEmail);
-    notify(bookingAudience(booking), {
-      title: accepted ? 'Pesanan diterima' : 'Pesanan ditolak',
-      body: accepted
-        ? `${provider?.name} menerima pesanan #${booking.id} untuk ${booking.date} ${booking.time}.`
-        : `${provider?.name} menolak pesanan #${booking.id}. Tanggal ${booking.date} kembali tersedia.`,
-      bookingId: booking.id,
-    });
-    whatsapp.send(
-      customer?.phone,
-      `Andallo: pesanan #${booking.id} ${accepted ? 'DITERIMA' : 'DITOLAK'} oleh ${provider?.name}.`,
-    );
-    broadcastBooking(booking);
-    store.save();
-    return { booking: serializeBooking(booking) };
-  }, { auth: ['provider', 'admin'] });
-
-  route('POST', '/api/bookings/:id/status', ({ user, params, body }) => {
-    const booking = getBookingFor(user, params.id);
-    const target = body.status;
-    let allowed = false;
-    if (target === STATUS.CANCELLED) {
-      allowed =
-        (user.role === 'customer' && [STATUS.PENDING, STATUS.ACCEPTED].includes(booking.status)) ||
-        (user.role === 'admin' && ACTIVE_STATUSES.has(booking.status));
-    } else if (user.role === 'provider' || user.role === 'admin') {
-      allowed = PROVIDER_TRANSITIONS[booking.status] === target;
-    }
-    if (!allowed) {
-      throw new HttpError(409, `Tidak bisa mengubah status dari ${STATUS_LABEL[booking.status] || booking.status} ke ${STATUS_LABEL[target] || target}.`);
-    }
-    booking.status = target;
-    if (target === STATUS.CANCELLED) booking.approvalExpiresAt = null;
-    booking.updatedAt = new Date().toISOString();
-
-    notify(bookingAudience(booking).filter((e) => e !== user.email), {
-      title: `Status pesanan: ${STATUS_LABEL[target]}`,
-      body: `Pesanan #${booking.id} sekarang berstatus ${STATUS_LABEL[target]}.`,
-      bookingId: booking.id,
-    });
-    broadcastBooking(booking);
-    store.save();
-    return { booking: serializeBooking(booking) };
-  }, { auth: [] });
-
-  route('POST', '/api/bookings/:id/location', ({ user, params, body }) => {
-    const booking = getBookingFor(user, params.id);
-    if (!TRACKABLE_STATUSES.has(booking.status)) throw new HttpError(409, 'Live location aktif setelah pesanan diterima.');
-    if (!isLatLng(body)) throw new HttpError(400, 'Koordinat tidak valid.');
-    const pos = { lat: body.lat, lng: body.lng, updatedAt: new Date().toISOString() };
-    if (user.role === 'provider') booking.providerPos = pos;
-    else booking.customerPos = pos;
-    pushTo(bookingAudience(booking), 'location', {
-      bookingId: booking.id,
-      role: user.role,
-      providerPos: booking.providerPos,
-      customerPos: booking.customerPos,
-    });
+    current.passwordHash = hashPassword(password);
     store.save();
     return { ok: true };
-  }, { auth: ['customer', 'provider'] });
+  }, 'user');
 
-  route('GET', '/api/bookings/:id/chat', ({ user, params }) => ({ chat: getBookingFor(user, params.id).chat }), { auth: [] });
-
-  route('POST', '/api/bookings/:id/chat', ({ user, params, body }) => {
-    const booking = getBookingFor(user, params.id);
-    const text = cleanText(body.text, 1000);
-    if (!text) throw new HttpError(400, 'Pesan tidak boleh kosong.');
-    const append = (sender, senderName, msgText) => {
-      const message = { id: nextId(booking.chat), sender, senderName, text: msgText, createdAt: new Date().toISOString() };
-      booking.chat.push(message);
-      if (booking.chat.length > MAX_CHAT_MESSAGES) booking.chat.splice(0, booking.chat.length - MAX_CHAT_MESSAGES);
-      pushTo(bookingAudience(booking), 'chat', { bookingId: booking.id, message });
-      return message;
-    };
-    const message = append(user.role, user.name, text);
-    if (user.role === 'customer') {
-      const answer = aiReply(text);
-      if (answer) append('ai', 'AI Andallo', answer);
-    }
-    notify(bookingAudience(booking).filter((e) => e !== user.email && findUser(e)?.role !== 'admin'), {
-      title: `Pesan baru dari ${user.name}`,
-      body: text.length > 80 ? `${text.slice(0, 80)}…` : text,
-      bookingId: booking.id,
-    });
+  route('GET', '/api/categories', () => ({ categories: data.listCategories() }));
+  route('POST', '/api/categories', ({ body }) => {
+    const category = data.createCategory(body);
     store.save();
-    return { status: 201, body: { message, chat: booking.chat } };
-  }, { auth: [] });
-
-  route('POST', '/api/bookings/:id/rating', ({ user, params, body }) => {
-    const booking = getBookingFor(user, params.id);
-    if (booking.status !== STATUS.DONE) throw new HttpError(409, 'Rating hanya bisa diberikan setelah pesanan selesai.');
-    if (booking.rated) throw new HttpError(409, 'Pesanan ini sudah diberi rating.');
-    const stars = Number(body.stars);
-    if (!Number.isInteger(stars) || stars < 1 || stars > 5) throw new HttpError(400, 'Rating harus 1 sampai 5.');
-    const provider = findProvider(booking.providerId);
-    booking.rated = true;
-    booking.rating = { stars, comment: cleanText(body.comment, 500), createdAt: new Date().toISOString() };
-    if (provider) {
-      const total = provider.rating * provider.reviews + stars;
-      provider.reviews += 1;
-      provider.rating = Math.round((total / provider.reviews) * 10) / 10;
-    }
-    notify([...providerUsers(booking.providerId), ...admins()].map((u) => u.email), {
-      title: 'Rating baru',
-      body: `${user.name} memberi ${stars} bintang untuk pesanan #${booking.id}.`,
-      bookingId: booking.id,
-    });
-    broadcastBooking(booking);
+    return { status: 201, body: { category } };
+  }, 'admin');
+  route('PUT', '/api/categories/:id', ({ params, body }) => {
+    const category = data.updateCategory(params.id, body);
     store.save();
-    return { booking: serializeBooking(booking), provider };
-  }, { auth: ['customer'] });
-
-  route('GET', '/api/notifications', ({ user }) => {
-    const list = db().notifications.filter((n) => n.userEmail === user.email).slice(-50).reverse();
-    return { notifications: list, unread: list.filter((n) => !n.read).length };
-  }, { auth: [] });
-
-  route('POST', '/api/notifications/read', ({ user }) => {
-    for (const n of db().notifications) if (n.userEmail === user.email) n.read = true;
+    return { category };
+  }, 'admin');
+  route('DELETE', '/api/categories/:id', ({ params }) => {
+    const result = data.deleteCategory(params.id);
     store.save();
-    return { ok: true };
-  }, { auth: [] });
+    return result;
+  }, 'admin');
 
-  route('GET', '/api/admin/overview', () => {
-    const bookings = db().bookings;
-    const byStatus = Object.fromEntries(Object.keys(STATUS_LABEL).map((s) => [s, 0]));
-    for (const b of bookings) byStatus[b.status] = (byStatus[b.status] || 0) + 1;
+  route('GET', '/api/services', ({ url, req }) => {
+    const user = resolveUser(req, url, 'optional');
+    const manage = url.searchParams.get('kelola') === '1';
+    if (manage && user?.role !== 'admin') throw new HttpError(403, 'Akses ini khusus admin.');
+    const available = url.searchParams.get('available');
     return {
-      stats: {
-        users: db().users.length,
-        providers: db().providers.length,
-        bookings: bookings.length,
-        revenue: bookings.filter((b) => b.status === STATUS.DONE).reduce((sum, b) => sum + b.total, 0),
-        byStatus,
-      },
-      users: db().users.map(publicUser),
+      services: data.listServices({
+        q: url.searchParams.get('q') || '',
+        category: url.searchParams.get('category') || '',
+        city: url.searchParams.get('city') || '',
+        minPrice: queryNumber(url.searchParams.get('minPrice')),
+        maxPrice: queryNumber(url.searchParams.get('maxPrice')),
+        minRating: queryNumber(url.searchParams.get('minRating')),
+        available: available === '1' ? true : available === '0' ? false : undefined,
+        featured: url.searchParams.get('featured') === '1' ? true : undefined,
+        sort: url.searchParams.get('sort') || 'recommended',
+        lat: queryNumber(url.searchParams.get('lat')),
+        lng: queryNumber(url.searchParams.get('lng')),
+        manage,
+      }),
     };
-  }, { auth: ['admin'] });
+  });
+  route('GET', '/api/services/:id', ({ params, req, url }) => {
+    const user = resolveUser(req, url, 'optional');
+    const manage = url.searchParams.get('kelola') === '1' && user?.role === 'admin';
+    return data.getService(params.id, { manage });
+  });
+  route('POST', '/api/services', ({ body }) => {
+    const service = data.createService(body);
+    store.save();
+    return { status: 201, body: { service } };
+  }, 'admin');
+  route('PUT', '/api/services/:id', ({ params, body }) => {
+    const service = data.updateService(params.id, body);
+    store.save();
+    return { service };
+  }, 'admin');
+  route('DELETE', '/api/services/:id', ({ params }) => {
+    const result = data.deleteService(params.id);
+    store.save();
+    return result;
+  }, 'admin');
 
-  function handleEvents(req, res, url) {
-    const user = requireUser(req, url);
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-store',
-      Connection: 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    });
-    res.write(`event: ready\ndata: ${JSON.stringify({ email: user.email })}\n\n`);
-    if (!sseClients.has(user.email)) sseClients.set(user.email, new Set());
-    sseClients.get(user.email).add(res);
-    const heartbeat = setInterval(() => res.write(': ping\n\n'), 25000);
-    req.on('close', () => {
-      clearInterval(heartbeat);
-      sseClients.get(user.email)?.delete(res);
-    });
-  }
+  route('GET', '/api/providers', ({ url, req }) => {
+    const user = resolveUser(req, url, 'optional');
+    const manage = url.searchParams.get('kelola') === '1';
+    if (manage && user?.role !== 'admin') throw new HttpError(403, 'Akses ini khusus admin.');
+    return { providers: data.listProviders({ manage, q: url.searchParams.get('q') || '' }) };
+  });
+  route('GET', '/api/providers/:id', ({ params, req, url }) => {
+    const user = resolveUser(req, url, 'optional');
+    const manage = url.searchParams.get('kelola') === '1' && user?.role === 'admin';
+    return data.getProvider(params.id, { manage });
+  });
+  route('POST', '/api/providers', ({ body }) => {
+    const provider = data.createProvider(body);
+    store.save();
+    return { status: 201, body: { provider } };
+  }, 'admin');
+  route('PUT', '/api/providers/:id', ({ params, body }) => {
+    const provider = data.updateProvider(params.id, body);
+    store.save();
+    return { provider };
+  }, 'admin');
+  route('DELETE', '/api/providers/:id', ({ params }) => {
+    const result = data.deleteProvider(params.id);
+    store.save();
+    return result;
+  }, 'admin');
+  route('POST', '/api/providers/:id/portfolio', ({ params, body }) => {
+    const item = data.addPortfolio(params.id, body);
+    store.save();
+    return { status: 201, body: { portfolio: item } };
+  }, 'admin');
+  route('DELETE', '/api/portfolio/:id', ({ params }) => {
+    const result = data.deletePortfolio(params.id);
+    store.save();
+    return result;
+  }, 'admin');
+
+  route('GET', '/api/bookings', ({ user }) => ({ bookings: data.listBookings(user) }), 'user');
+  route('POST', '/api/bookings', ({ user, body }) => {
+    const booking = data.createBooking(user, body);
+    store.save();
+    return { status: 201, body: { booking } };
+  }, 'customer');
+  route('GET', '/api/bookings/:id', ({ user, params }) => ({ booking: data.getBooking(user, params.id) }), 'user');
+  route('PUT', '/api/bookings/:id', ({ user, params, body }) => {
+    const booking = data.updateBooking(user, params.id, body);
+    store.save();
+    return { booking };
+  }, 'user');
+  route('DELETE', '/api/bookings/:id', ({ user, params }) => {
+    const result = data.deleteBooking(user, params.id);
+    store.save();
+    return result;
+  }, 'admin');
+
+  route('GET', '/api/reviews', ({ url, req }) => {
+    const user = resolveUser(req, url, 'optional');
+    if (url.searchParams.get('mine') === '1' && !user) throw new HttpError(401, 'Silakan masuk terlebih dahulu.');
+    return {
+      reviews: data.listReviews({
+        serviceId: url.searchParams.get('serviceId') || '',
+        providerId: url.searchParams.get('providerId') || '',
+        mine: url.searchParams.get('mine') === '1',
+        user,
+      }),
+    };
+  });
+  route('POST', '/api/reviews', ({ user, body }) => {
+    const review = data.createReview(user, body);
+    store.save();
+    return { status: 201, body: { review } };
+  }, 'customer');
+
+  route('GET', '/api/saved', ({ user }) => ({ services: data.listSaved(user) }), 'customer');
+  route('POST', '/api/saved', ({ user, body }) => {
+    const result = data.saveService(user, body.serviceId);
+    store.save();
+    return result;
+  }, 'customer');
+  route('DELETE', '/api/saved/:serviceId', ({ user, params }) => {
+    const result = data.unsaveService(user, params.serviceId);
+    store.save();
+    return result;
+  }, 'customer');
+
+  route('GET', '/api/admin/stats', () => ({ stats: data.stats() }), 'admin');
+  route('GET', '/api/customers', () => ({ customers: data.listCustomers() }), 'admin');
 
   async function serveStatic(req, res, url) {
     let pathname;
@@ -829,7 +416,7 @@ export function createApp({ dbFile, env = process.env, background = true } = {})
     const ext = path.extname(target);
     res.writeHead(200, {
       'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600',
+      'Cache-Control': ['.html', '.js', '.css'].includes(ext) ? 'no-cache' : 'public, max-age=86400',
     });
     if (req.method === 'HEAD') return res.end();
     fs.createReadStream(target).pipe(res);
@@ -837,51 +424,41 @@ export function createApp({ dbFile, env = process.env, background = true } = {})
 
   async function handler(req, res) {
     securityHeaders(res);
-    expirePendingBookings();
     const url = new URL(req.url || '/', 'http://localhost');
     try {
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Metode tidak diizinkan.');
         return await serveStatic(req, res, url);
       }
-      if (req.method === 'GET' && url.pathname === '/api/events') return handleEvents(req, res, url);
-
-      for (const r of routes) {
-        if (r.method !== req.method) continue;
-        const match = url.pathname.match(r.regex);
+      for (const entry of routes) {
+        if (entry.method !== req.method) continue;
+        const match = url.pathname.match(entry.regex);
         if (!match) continue;
-        const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(match[i + 1])]));
-        const user = r.auth ? requireUser(req, url, ...r.auth) : null;
-        const body = req.method === 'POST' ? await requestBody(req) : {};
-        const result = await r.handler({ req, url, params, body, user });
+        const params = Object.fromEntries(entry.keys.map((key, index) => [key, decodeURIComponent(match[index + 1])]));
+        const user = entry.auth && entry.auth !== 'optional' ? resolveUser(req, url, entry.auth) : null;
+        const body = req.method === 'POST' || req.method === 'PUT' ? await requestBody(req) : {};
+        const result = await entry.handler({ req, url, params, body, user });
         if (result && typeof result.status === 'number' && 'body' in result) return sendJson(res, result.status, result.body);
         return sendJson(res, 200, result);
       }
       throw new HttpError(404, 'Endpoint tidak ditemukan.');
     } catch (err) {
-      if (err instanceof HttpError) return sendJson(res, err.status, { error: err.message });
+      if (err instanceof HttpError || err instanceof DomainError) return sendJson(res, err.status, { error: err.message });
       console.error('[server] unexpected error:', err);
       return sendJson(res, 500, { error: 'Terjadi kesalahan pada server.' });
     }
   }
 
   const server = http.createServer(handler);
-  const sweeper = background ? setInterval(expirePendingBookings, 5000) : null;
-  sweeper?.unref();
-  expirePendingBookings();
 
-  // SSE responses never finish on their own, so they must be ended before server.close() can resolve.
   function close() {
-    clearInterval(sweeper);
-    for (const set of sseClients.values()) for (const res of set) res.end();
-    sseClients.clear();
     return new Promise((resolve) => {
       server.close(() => store.flush().then(resolve));
-      server.closeIdleConnections();
+      server.closeIdleConnections?.();
     });
   }
 
-  return { server, handler, store, close, expirePendingBookings };
+  return { server, handler, store, data, close };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

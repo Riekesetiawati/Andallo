@@ -3,22 +3,20 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { Readable } from 'node:stream';
 import { createApp, defaultDbFile, verifyPassword } from '../server.js';
 
-const SEED = path.resolve(import.meta.dirname, '../data/db.json');
 let app;
 let base;
 let tmpDir;
 
 function futureDate(days) {
-  const d = new Date();
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(date);
 }
 
 async function call(method, url, { token, body } = {}) {
-  const res = await fetch(base + url, {
+  const response = await fetch(base + url, {
     method,
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
@@ -26,32 +24,26 @@ async function call(method, url, { token, body } = {}) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  const text = await res.text();
+  const text = await response.text();
   let data;
   try {
     data = JSON.parse(text);
   } catch {
     data = text;
   }
-  return { status: res.status, data, headers: res.headers };
+  return { status: response.status, data, headers: response.headers };
 }
 
-async function login(email, password = 'demo123') {
+async function login(email, password = 'Demo1234') {
   const { status, data } = await call('POST', '/api/auth/login', { body: { email, password } });
-  assert.equal(status, 200, `login ${email} failed: ${JSON.stringify(data)}`);
+  assert.equal(status, 200, JSON.stringify(data));
   return data.token;
 }
 
 before(async () => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'andallo-test-'));
-  const seed = JSON.parse(fs.readFileSync(SEED, 'utf8'));
-  // Exercise the plaintext → hash migration path regardless of the committed seed's state.
-  for (const u of seed.users) {
-    delete u.passwordHash;
-    u.password = 'demo123';
-  }
-  fs.writeFileSync(path.join(tmpDir, 'db.json'), JSON.stringify(seed));
-  app = createApp({ dbFile: path.join(tmpDir, 'db.json'), env: {} });
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'andallo-'));
+  fs.copyFileSync(path.resolve('data/db.json'), path.join(tmpDir, 'db.json'));
+  app = createApp({ dbFile: path.join(tmpDir, 'db.json'), env: {}, background: false });
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${app.server.address().port}`;
 });
@@ -61,294 +53,166 @@ after(async () => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-test('serves the web app and logo', async () => {
+test('serves the website and blocks path traversal', async () => {
   const home = await call('GET', '/');
   assert.equal(home.status, 200);
-  assert.match(home.data, /<div id="app"/);
+  assert.match(home.data, /Andallo/);
   assert.equal(home.headers.get('x-content-type-options'), 'nosniff');
-  const logo = await fetch(base + '/assets/andallo-logo.png');
-  assert.equal(logo.status, 200);
-  assert.equal(logo.headers.get('content-type'), 'image/png');
+  const escaped = await fetch(`${base}/..%2fserver.js`);
+  assert.ok([403, 404].includes(escaped.status));
 });
 
-test('blocks path traversal outside public/', async () => {
-  const res = await fetch(base + '/..%2fserver.js');
-  assert.ok([403, 404].includes(res.status));
-  const res2 = await fetch(base + '/%2e%2e/data/db.json');
-  assert.ok([403, 404].includes(res2.status));
-});
-
-test('migrates plaintext passwords to scrypt hashes', async () => {
-  await app.store.flush();
+test('passwords are hashed and hidden from clients', async () => {
   const onDisk = JSON.parse(fs.readFileSync(path.join(tmpDir, 'db.json'), 'utf8'));
-  for (const u of onDisk.users) {
-    assert.equal(u.password, undefined);
-    assert.ok(verifyPassword('demo123', u.passwordHash));
-  }
-  assert.ok(onDisk.chatTemplates.customer.length > 0);
+  assert.ok(onDisk.users.every((user) => verifyPassword('Demo1234', user.passwordHash) && user.password === undefined));
+  const { data } = await call('POST', '/api/auth/login', { body: { email: 'rieke@andallo.com', password: 'Demo1234' } });
+  assert.equal(data.user.passwordHash, undefined);
+  assert.equal(data.user.role, 'customer');
 });
 
-test('login works for all demo roles and never leaks password data', async () => {
-  for (const email of ['rieke@andallo.com', 'mitra@andallo.com', 'admin@andallo.com']) {
-    const { status, data } = await call('POST', '/api/auth/login', { body: { email, password: 'demo123' } });
-    assert.equal(status, 200);
-    assert.ok(data.token.length > 20);
-    assert.equal(data.user.password, undefined);
-    assert.equal(data.user.passwordHash, undefined);
-  }
-  const bad = await call('POST', '/api/auth/login', { body: { email: 'rieke@andallo.com', password: 'wrong' } });
-  assert.equal(bad.status, 401);
-});
-
-test('protected endpoints require a valid token and the right role', async () => {
-  assert.equal((await call('GET', '/api/bookings')).status, 401);
-  assert.equal((await call('GET', '/api/bookings', { token: 'forged' })).status, 401);
-  const customer = await login('rieke@andallo.com');
-  assert.equal((await call('GET', '/api/admin/overview', { token: customer })).status, 403);
-  assert.equal((await call('POST', '/api/bookings/1001/decision', { token: customer, body: { decision: 'accept' } })).status, 403);
-});
-
-test('provider search filters, sorts and returns distance', async () => {
-  const all = await call('GET', '/api/providers');
-  assert.equal(all.status, 200);
-  assert.equal(all.data.providers.length, 35);
-  assert.equal(all.data.providers[0].providerEmail, undefined);
-  const distances = all.data.providers.map((p) => p.distanceKm);
-  assert.deepEqual(distances, [...distances].sort((a, b) => a - b));
-
-  const cheap = await call('GET', '/api/providers?category=Otomotif&sort=price_asc');
-  assert.ok(cheap.data.providers.every((p) => p.category === 'Otomotif'));
-  assert.equal(cheap.data.providers[0].price, 145000);
-
-  const q = await call('GET', '/api/providers?q=barber');
-  assert.ok(q.data.providers.length >= 3);
-});
-
-test('booking lifecycle: create → locked date → accept → progress → done → rating', async () => {
-  const customer = await login('rieke@andallo.com');
-  const mitra = await login('mitra@andallo.com');
-  const date = futureDate(3);
-
-  const created = await call('POST', '/api/bookings', { token: customer, body: { providerId: 1, date, time: '10:00', note: 'Tes' } });
+test('registration validates input and rejects a duplicate email', async () => {
+  const bad = await call('POST', '/api/auth/register', { body: { name: 'A', email: 'nope', phone: '123', password: 'secret', confirmPassword: 'secret' } });
+  assert.equal(bad.status, 400);
+  const created = await call('POST', '/api/auth/register', {
+    body: { name: 'Sinta Maharani', email: 'sinta@example.com', phone: '081234009988', password: 'Rahasia1', confirmPassword: 'Rahasia1' },
+  });
   assert.equal(created.status, 201);
-  const id = created.data.booking.id;
-  assert.equal(created.data.booking.status, 'PENDING');
-  assert.ok(Date.parse(created.data.booking.approvalExpiresAt) > Date.now());
+  assert.equal(created.data.user.role, 'customer');
+  const duplicate = await call('POST', '/api/auth/register', {
+    body: { name: 'Sinta Maharani', email: 'sinta@example.com', phone: '081234009988', password: 'Rahasia1', confirmPassword: 'Rahasia1' },
+  });
+  assert.equal(duplicate.status, 409);
+});
 
-  const booked = await call('GET', '/api/providers/1/booked-dates');
-  assert.ok(booked.data.bookedDates.includes(date));
-  const clash = await call('POST', '/api/bookings', { token: customer, body: { providerId: 1, date, time: '14:00' } });
+test('customers cannot call admin endpoints', async () => {
+  const customer = await login('rieke@andallo.com');
+  assert.equal((await call('GET', '/api/admin/stats', { token: customer })).status, 403);
+  assert.equal((await call('POST', '/api/services', { token: customer, body: { name: 'X' } })).status, 403);
+  assert.equal((await call('GET', '/api/customers', { token: customer })).status, 403);
+  assert.equal((await call('GET', '/api/bookings')).status, 401);
+});
+
+test('service search filters by keyword, category, price, and rating', async () => {
+  const all = await call('GET', '/api/services');
+  assert.equal(all.data.services.length, 9);
+  const photo = await call('GET', '/api/services?q=pernikahan&category=cat_foto');
+  assert.ok(photo.data.services.every((service) => service.categoryName === 'Fotografi'));
+  assert.ok(photo.data.services.some((service) => /Fotografi Pernikahan/.test(service.name)));
+  const cheap = await call('GET', '/api/services?maxPrice=200000&sort=price_asc');
+  assert.ok(cheap.data.services.every((service) => service.price <= 200000));
+  assert.equal(cheap.data.services[0].price <= cheap.data.services.at(-1).price, true);
+  const rated = await call('GET', '/api/services?minRating=4.5&sort=rating');
+  assert.ok(rated.data.services.every((service) => service.rating >= 4.5));
+  const provider = await call('GET', '/api/services?q=BersihHati');
+  assert.equal(provider.data.services.length, 1);
+});
+
+test('booking creates a record, blocks a taken slot, and only then allows a review', async () => {
+  const customer = await login('rieke@andallo.com');
+  const admin = await login('admin@andallo.com');
+  const date = futureDate(9);
+  const created = await call('POST', '/api/bookings', {
+    token: customer,
+    body: { serviceId: 'svc_salon', packageId: 'pkg_salon_rambut', date, time: '14:00', location: 'Salon Pelukan, Setiabudi, Bandung', notes: 'Rambut kering' },
+  });
+  assert.equal(created.status, 201, JSON.stringify(created.data));
+  assert.match(created.data.booking.id, /^ADL-/);
+  assert.equal(created.data.booking.status, 'pending');
+  assert.equal(created.data.booking.total, created.data.booking.price + created.data.booking.platformFee);
+  const clash = await call('POST', '/api/bookings', {
+    token: customer,
+    body: { serviceId: 'svc_salon', packageId: 'pkg_salon_rambut', date, time: '14:00', location: 'Alamat lain yang cukup panjang' },
+  });
   assert.equal(clash.status, 409);
-
-  const mitraList = await call('GET', '/api/bookings', { token: mitra });
-  assert.ok(mitraList.data.bookings.some((b) => b.id === id));
-
-  const accepted = await call('POST', `/api/bookings/${id}/decision`, { token: mitra, body: { decision: 'accept' } });
-  assert.equal(accepted.status, 200);
-  assert.equal(accepted.data.booking.status, 'ACCEPTED');
-
-  const earlyRating = await call('POST', `/api/bookings/${id}/rating`, { token: customer, body: { stars: 5 } });
-  assert.equal(earlyRating.status, 409);
-
-  const loc = await call('POST', `/api/bookings/${id}/location`, { token: customer, body: { lat: -6.24, lng: 106.97 } });
-  assert.equal(loc.status, 200);
-
-  for (const status of ['ON_THE_WAY', 'IN_PROGRESS', 'SELESAI']) {
-    const res = await call('POST', `/api/bookings/${id}/status`, { token: mitra, body: { status } });
-    assert.equal(res.status, 200, JSON.stringify(res.data));
-    assert.equal(res.data.booking.status, status);
-  }
-
-  const rated = await call('POST', `/api/bookings/${id}/rating`, { token: customer, body: { stars: 5, comment: 'Mantap' } });
-  assert.equal(rated.status, 200);
-  assert.equal(rated.data.booking.rated, true);
-  assert.equal(rated.data.provider.reviews, 102);
-
-  const again = await call('POST', `/api/bookings/${id}/rating`, { token: customer, body: { stars: 4 } });
+  const early = await call('POST', '/api/reviews', { token: customer, body: { bookingId: created.data.booking.id, rating: 5, text: 'Terlalu cepat untuk diulas.' } });
+  assert.equal(early.status, 409);
+  const customerComplete = await call('PUT', `/api/bookings/${created.data.booking.id}`, { token: customer, body: { status: 'completed' } });
+  assert.equal(customerComplete.status, 403);
+  const done = await call('PUT', `/api/bookings/${created.data.booking.id}`, { token: admin, body: { status: 'completed' } });
+  assert.equal(done.data.booking.status, 'completed');
+  const review = await call('POST', '/api/reviews', { token: customer, body: { bookingId: created.data.booking.id, rating: 5, text: 'Rambutnya rapi dan wangi, sesuai yang dijanjikan.' } });
+  assert.equal(review.status, 201);
+  const again = await call('POST', '/api/reviews', { token: customer, body: { bookingId: created.data.booking.id, rating: 4, text: 'Tidak boleh ulasan kedua.' } });
   assert.equal(again.status, 409);
-
-  const freed = await call('GET', '/api/providers/1/booked-dates');
-  assert.ok(!freed.data.bookedDates.includes(date));
+  const listed = await call('GET', '/api/reviews?serviceId=svc_salon');
+  assert.ok(listed.data.reviews.some((item) => item.bookingId === created.data.booking.id));
 });
 
-test('pending bookings expire after the approval window and free the date', async () => {
+test('a finished seeded booking can be reviewed and an open provider cannot be deleted', async () => {
   const customer = await login('rieke@andallo.com');
-  const mitra = await login('mitra@andallo.com');
-  const date = futureDate(5);
-  const { data } = await call('POST', '/api/bookings', { token: customer, body: { providerId: 1, date, time: '09:00' } });
-  const booking = app.store.data.bookings.find((b) => b.id === data.booking.id);
-  booking.approvalExpiresAt = new Date(Date.now() - 1000).toISOString();
-  app.expirePendingBookings();
-  assert.equal(booking.status, 'EXPIRED');
-
-  const late = await call('POST', `/api/bookings/${booking.id}/decision`, { token: mitra, body: { decision: 'accept' } });
-  assert.equal(late.status, 409);
-  const dates = await call('GET', '/api/providers/1/booked-dates');
-  assert.ok(!dates.data.bookedDates.includes(date));
-});
-
-test('providers cannot act on other providers\' bookings', async () => {
-  const customer = await login('rieke@andallo.com');
-  const mitra = await login('mitra@andallo.com');
-  const { data } = await call('POST', '/api/bookings', { token: customer, body: { providerId: 2, date: futureDate(4), time: '11:00' } });
-  const res = await call('POST', `/api/bookings/${data.booking.id}/decision`, { token: mitra, body: { decision: 'accept' } });
-  assert.equal(res.status, 404);
-
   const admin = await login('admin@andallo.com');
-  const rejected = await call('POST', `/api/bookings/${data.booking.id}/decision`, { token: admin, body: { decision: 'reject' } });
-  assert.equal(rejected.data.booking.status, 'REJECTED');
+  const review = await call('POST', '/api/reviews', { token: customer, body: { bookingId: 'ADL-1003', rating: 4, text: 'Makanannya hangat dan porsinya cukup untuk tamu kami.' } });
+  assert.equal(review.status, 201);
+  const blocked = await call('DELETE', '/api/providers/prv_cahaya', { token: admin });
+  assert.equal(blocked.status, 409);
 });
 
-test('booking validation rejects past dates and bad input', async () => {
+test('saved services and profile updates persist', async () => {
   const customer = await login('rieke@andallo.com');
-  const past = await call('POST', '/api/bookings', { token: customer, body: { providerId: 3, date: '2020-01-01', time: '10:00' } });
-  assert.equal(past.status, 400);
-  const badTime = await call('POST', '/api/bookings', { token: customer, body: { providerId: 3, date: futureDate(2), time: '25:00' } });
-  assert.equal(badTime.status, 400);
-  const missing = await call('POST', '/api/bookings', { token: customer, body: { providerId: 9999, date: futureDate(2), time: '10:00' } });
-  assert.equal(missing.status, 404);
-  const res = await fetch(base + '/api/bookings', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${customer}`, 'Content-Type': 'application/json' },
-    body: '{not json',
-  });
-  assert.equal(res.status, 400);
+  const saved = await call('POST', '/api/saved', { token: customer, body: { serviceId: 'svc_event' } });
+  assert.equal(saved.status, 200);
+  const list = await call('GET', '/api/saved', { token: customer });
+  assert.ok(list.data.services.some((service) => service.id === 'svc_event'));
+  await call('DELETE', '/api/saved/svc_event', { token: customer });
+  const after = await call('GET', '/api/saved', { token: customer });
+  assert.equal(after.data.services.some((service) => service.id === 'svc_event'), false);
+  const profile = await call('PUT', '/api/me', { token: customer, body: { name: 'Rieke Setiawati', phone: '081200011122' } });
+  assert.equal(profile.data.user.phone, '081200011122');
 });
 
-test('chat stores messages and AI answers known questions', async () => {
-  const customer = await login('rieke@andallo.com');
-  const res = await call('POST', '/api/bookings/1001/chat', { token: customer, body: { text: 'Bagaimana cara pembayaran?' } });
-  assert.equal(res.status, 201);
-  const last = res.data.chat.at(-1);
-  assert.equal(last.sender, 'ai');
-  assert.match(last.text, /payment gateway/);
-
-  const templates = await call('GET', '/api/chat-templates', { token: customer });
-  assert.ok(templates.data.templates.length >= 3);
+test('forgot password resets the hash without email delivery', async () => {
+  const forgot = await call('POST', '/api/auth/forgot', { body: { email: 'budi@andallo.com' } });
+  assert.equal(forgot.status, 200);
+  assert.match(forgot.data.demoResetPath, /token=/);
+  const token = new URL('http://local/' + forgot.data.demoResetPath.replace('/#/', '')).searchParams.get('token') || forgot.data.demoResetPath.split('token=')[1];
+  const reset = await call('POST', '/api/auth/reset', { body: { token, password: 'Baru1234' } });
+  assert.equal(reset.status, 200);
+  assert.equal((await call('POST', '/api/auth/login', { body: { email: 'budi@andallo.com', password: 'Demo1234' } })).status, 401);
+  assert.equal((await call('POST', '/api/auth/login', { body: { email: 'budi@andallo.com', password: 'Baru1234' } })).status, 200);
 });
 
-test('notifications are created for booking events', async () => {
-  const mitra = await login('mitra@andallo.com');
-  const { data } = await call('GET', '/api/notifications', { token: mitra });
-  assert.ok(data.notifications.some((n) => n.title === 'Pesanan baru'));
-  const read = await call('POST', '/api/notifications/read', { token: mitra });
-  assert.equal(read.status, 200);
-  const after = await call('GET', '/api/notifications', { token: mitra });
-  assert.equal(after.data.unread, 0);
-});
-
-test('SSE stream authenticates and delivers events', async () => {
-  const customer = await login('rieke@andallo.com');
-  const unauth = await fetch(base + '/api/events');
-  assert.equal(unauth.status, 401);
-
-  const controller = new AbortController();
-  const res = await fetch(`${base}/api/events?token=${customer}`, { signal: controller.signal });
-  assert.equal(res.headers.get('content-type'), 'text/event-stream');
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  const readUntil = async (needle) => {
-    while (!buffer.includes(needle)) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value);
-    }
-    return buffer;
-  };
-  await readUntil('event: ready');
-  await call('POST', '/api/bookings', { token: customer, body: { providerId: 6, date: futureDate(6), time: '08:00' } });
-  const text = await readUntil('event: booking');
-  assert.match(text, /event: notification/);
-  // Left open on purpose: after() must still shut the server down with a live SSE client.
-  reader.releaseLock();
-});
-
-test('admin overview returns stats without password data', async () => {
+test('admin can create a category and a service that customers can find', async () => {
   const admin = await login('admin@andallo.com');
-  const { status, data } = await call('GET', '/api/admin/overview', { token: admin });
-  assert.equal(status, 200);
-  assert.equal(data.stats.providers, 35);
-  assert.ok(data.users.every((u) => u.passwordHash === undefined && u.password === undefined));
+  const category = await call('POST', '/api/categories', { token: admin, body: { name: 'Dekorasi' } });
+  assert.equal(category.status, 201);
+  const service = await call('POST', '/api/services', {
+    token: admin,
+    body: {
+      name: 'Dekorasi Lamaran Mini',
+      providerId: 'prv_ruang',
+      categoryId: category.data.category.id,
+      description: 'Rangkaian bunga dan kain untuk lamaran di rumah, dipasang pada hari yang sama.',
+      city: 'Jakarta',
+      location: 'Jakarta Pusat',
+      images: ['https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&w=1200&q=80'],
+      packages: [{ name: 'Sudut foto', description: 'Satu sudut dekor.', price: 1750000, duration: '4 jam' }],
+      available: true,
+      active: true,
+      featured: true,
+    },
+  });
+  assert.equal(service.status, 201, JSON.stringify(service.data));
+  const found = await call('GET', `/api/services?q=${encodeURIComponent('Dekorasi Lamaran')}`);
+  assert.equal(found.data.services.length, 1);
+  const hidden = await call('PUT', `/api/services/${service.data.service.id}`, { token: admin, body: { active: false } });
+  assert.equal(hidden.status, 200);
+  const gone = await call('GET', `/api/services/${service.data.service.id}`);
+  assert.equal(gone.status, 404);
 });
 
-function invoke(handler, { method, url, headers = {}, json, parsedBody }) {
-  return new Promise((resolve, reject) => {
-    const payload = json ? Buffer.from(JSON.stringify(json)) : null;
-    const req = payload ? Readable.from([payload]) : Readable.from([]);
-    req.method = method;
-    req.url = url;
-    req.headers = headers;
-    req.socket = { remoteAddress: '127.0.0.1' };
-    if (parsedBody) req.body = parsedBody;
-    const res = {
-      statusCode: 200,
-      headers: {},
-      body: '',
-      setHeader(key, value) {
-        this.headers[key.toLowerCase()] = value;
-      },
-      writeHead(status, extra) {
-        this.statusCode = status;
-        if (extra) Object.assign(this.headers, extra);
-      },
-      write(chunk) {
-        this.body += chunk;
-        return true;
-      },
-      end(chunk) {
-        if (chunk) this.body += chunk;
-        try {
-          this.json = JSON.parse(this.body);
-        } catch {
-          this.json = null;
-        }
-        resolve(this);
-      },
-    };
-    Promise.resolve(handler(req, res)).catch(reject);
-  });
-}
-
-test('signed sessions work across instances and accept a pre-parsed JSON body', async () => {
-  await app.store.flush();
-  const other = createApp({ dbFile: path.join(tmpDir, 'db.json'), background: false });
-  try {
-    const token = await login('admin@andallo.com');
-    const me = await invoke(other.handler, {
-      method: 'GET',
-      url: '/api/me',
-      headers: { authorization: `Bearer ${token}` },
-    });
-    assert.equal(me.statusCode, 200);
-    assert.equal(me.json.user.email, 'admin@andallo.com');
-
-    const loggedIn = await invoke(other.handler, {
-      method: 'POST',
-      url: '/api/auth/login',
-      parsedBody: { email: 'rieke@andallo.com', password: 'demo123' },
-    });
-    assert.equal(loggedIn.statusCode, 200, JSON.stringify(loggedIn.json));
-    assert.equal(loggedIn.json.user.role, 'customer');
-  } finally {
-    await other.close();
-  }
+test('admin stats count customers and logout invalidates the token', async () => {
+  const admin = await login('admin@andallo.com');
+  const stats = await call('GET', '/api/admin/stats', { token: admin });
+  assert.equal(stats.status, 200);
+  assert.ok(stats.data.stats.customers >= 4);
+  assert.ok(stats.data.stats.revenue > 0);
+  const token = await login('dina@andallo.com');
+  await call('POST', '/api/auth/logout', { token });
+  assert.equal((await call('GET', '/api/me', { token })).status, 401);
 });
 
 test('vercel mode seeds a writable copy of the bundled database', () => {
   const dest = path.join(tmpDir, 'vercel-db.json');
-  const file = defaultDbFile({ VERCEL: '1', VERCEL_DB_FILE: dest });
-  assert.equal(file, dest);
-  const seeded = JSON.parse(fs.readFileSync(dest, 'utf8'));
-  assert.equal(seeded.users.length, 3);
-  seeded.users.push({ email: 'extra@andallo.com' });
-  fs.writeFileSync(dest, JSON.stringify(seeded));
   assert.equal(defaultDbFile({ VERCEL: '1', VERCEL_DB_FILE: dest }), dest);
-  assert.equal(JSON.parse(fs.readFileSync(dest, 'utf8')).users.length, 4);
-});
-
-test('logout invalidates the session token', async () => {
-  const token = await login('rieke@andallo.com');
-  await call('POST', '/api/auth/logout', { token });
-  assert.equal((await call('GET', '/api/me', { token })).status, 401);
+  assert.equal(JSON.parse(fs.readFileSync(dest, 'utf8')).services.length, 9);
 });

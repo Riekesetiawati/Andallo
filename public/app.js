@@ -1,1388 +1,1301 @@
-const TOKEN_KEY = 'andallo.token';
-const DEFAULT_ORIGIN = { lat: -6.2383, lng: 106.9756 };
-const TIME_SLOTS = ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00', '19:00'];
-const LIFECYCLE = [
-  { status: 'PENDING', label: 'Menunggu persetujuan', hint: 'Penyedia punya waktu 2 menit untuk merespons.' },
-  { status: 'ACCEPTED', label: 'Diterima', hint: 'Jadwal dikunci untuk kamu.' },
-  { status: 'ON_THE_WAY', label: 'Dalam perjalanan', hint: 'Penyedia menuju lokasi.' },
-  { status: 'IN_PROGRESS', label: 'Sedang dikerjakan', hint: 'Layanan sedang berlangsung.' },
-  { status: 'SELESAI', label: 'Selesai', hint: 'Beri rating untuk penyedia.' },
-];
-const NEXT_ACTION = {
-  ACCEPTED: { status: 'ON_THE_WAY', label: 'Mulai perjalanan' },
-  ON_THE_WAY: { status: 'IN_PROGRESS', label: 'Mulai kerjakan' },
-  IN_PROGRESS: { status: 'SELESAI', label: 'Tandai selesai' },
-};
-const TRACKABLE = new Set(['ACCEPTED', 'ON_THE_WAY', 'IN_PROGRESS']);
-const ROLE_LABEL = { customer: 'Customer', provider: 'Mitra', admin: 'Admin' };
-const DEMO_ACCOUNTS = [
-  { email: 'rieke@andallo.com', name: 'Rieke Setiawati', role: 'customer' },
-  { email: 'mitra@andallo.com', name: 'Bara Barbershop', role: 'provider' },
-  { email: 'admin@andallo.com', name: 'Admin Andallo', role: 'admin' },
-];
+import { api, ApiError } from './js/api.js';
+import { bumpGeneration, isCurrent, setCity, setCoords, setSession, state, toggleCompare } from './js/store.js';
+import { confirmDialog, emptyState, errorBox, esc, formatDate, formatLongDate, icon, initials, lightbox, logo, rupiah, skeletonCards, starRow, STATUS_LABEL, toast } from './js/ui.js';
 
-const state = {
-  token: localStorage.getItem(TOKEN_KEY),
-  user: null,
-  bookings: [],
-  notifications: [],
-  unread: 0,
-  categories: [],
-  origin: null,
-  filters: { q: '', category: '', sort: 'distance' },
-  events: null,
-  maps: [],
-  geoWatch: null,
-  geoBookingId: null,
+const CITIES = ['Tangerang', 'Jakarta', 'Bekasi', 'Bandung', 'Depok'];
+const TIMES = ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+
+const parseRoute = () => {
+  const raw = (location.hash || '#/').replace(/^#/, '');
+  const [path, query = ''] = raw.split('?');
+  const parts = path.split('/').filter(Boolean);
+  return { parts, params: Object.fromEntries(new URLSearchParams(query)), path: `/${parts.join('/')}` };
 };
 
-const $app = document.getElementById('app');
-const $modal = document.getElementById('modal-root');
+const cityOptions = (selected, label = 'Semua lokasi') =>
+  `<option value="">${label}</option>${CITIES.map((city) => `<option value="${city}" ${city === selected ? 'selected' : ''}>${city}</option>`).join('')}`;
 
-// ---------- utils ----------
+const categoryOptions = (selected, label = 'Semua kategori') =>
+  `<option value="">${label}</option>${state.categories.map((category) => `<option value="${category.id}" ${category.id === selected ? 'selected' : ''}>${esc(category.name)}</option>`).join('')}`;
 
-const esc = (value) =>
-  String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-const rupiah = (n) => 'Rp' + Number(n || 0).toLocaleString('id-ID');
-const initials = (name) => esc((name || '?').split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase());
-const fmtDate = (iso) =>
-  new Date(`${iso}T00:00:00`).toLocaleDateString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-const fmtTime = (iso) => new Date(iso).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-const fmtRelative = (iso) => {
-  const diff = (Date.now() - Date.parse(iso)) / 1000;
-  if (diff < 60) return 'baru saja';
-  if (diff < 3600) return `${Math.floor(diff / 60)} menit lalu`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} jam lalu`;
-  return new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
-};
-const localIso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const bookHref = (id) => (state.user?.role === 'customer' ? `#/pesan/${id}` : `#/masuk?lanjut=${encodeURIComponent(`/pesan/${id}`)}`);
 
-const ICONS = {
-  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
-  calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
-  bell: '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
-  pin: '<path d="M12 22s8-6.5 8-13a8 8 0 1 0-16 0c0 6.5 8 13 8 13z"/><circle cx="12" cy="9" r="3"/>',
-  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
-  grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
-  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
-  store: '<path d="M3 9 5 3h14l2 6"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/>',
-  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
-  check: '<path d="M20 6 9 17l-5-5"/>',
-  x: '<path d="M18 6 6 18M6 6l12 12"/>',
-  back: '<path d="m15 18-6-6 6-6"/>',
-  send: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
-  star: '<path d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8-6.2-3.2L5.8 21 7 14.2 2 9.3l6.9-1z"/>',
-  menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
-  locate: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/>',
-  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
-  clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
-  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
-};
-const icon = (name, size = 18) =>
-  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
-const starIcon = (size = 14) =>
-  `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${ICONS.star}</svg>`;
-
-function toast(title, body = '', type = 'info') {
-  const el = document.createElement('div');
-  el.className = `toast ${type === 'error' ? 'error' : ''}`;
-  el.innerHTML = `<strong>${esc(title)}</strong>${body ? `<span>${esc(body)}</span>` : ''}`;
-  document.getElementById('toasts').append(el);
-  setTimeout(() => el.remove(), 5000);
-}
-
-class ApiError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-async function api(path, { method = 'GET', body } = {}) {
-  let res;
-  try {
-    res = await fetch(path, {
-      method,
-      headers: {
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
-        ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch {
-    throw new ApiError(0, 'Tidak dapat terhubung ke server. Periksa koneksi internet kamu.');
-  }
-  const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && state.user) {
-    signOut(false);
-    toast('Sesi berakhir', 'Silakan masuk kembali.', 'error');
-  }
-  if (!res.ok) throw new ApiError(res.status, data.error || 'Terjadi kesalahan.');
-  return data;
-}
-
-// ---------- maps ----------
-
-const mapAlive = (map) => Boolean(map) && state.maps.includes(map);
-
-function destroyMaps() {
-  for (const m of state.maps) {
-    m.stop();
-    m.remove();
-  }
-  state.maps = [];
-}
-
-function makeMap(el, center, zoom = 13) {
-  if (!window.L) {
-    el.innerHTML = '<div class="map-fallback">Peta tidak dapat dimuat. Periksa koneksi internet kamu.</div>';
-    return null;
-  }
-  // Zoom animations that outlive a view change make Leaflet throw on removed maps.
-  const map = L.map(el, { scrollWheelZoom: false, zoomAnimation: false, fadeAnimation: false }).setView([center.lat, center.lng], zoom);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-  }).addTo(map);
-  state.maps.push(map);
-  setTimeout(() => mapAlive(map) && map.invalidateSize(), 60);
-  return map;
-}
-
-const pinIcon = (kind) =>
-  window.L &&
-  L.divIcon({
-    className: '',
-    html: `<div class="pin pin-${kind}"></div>`,
-    iconSize: kind === 'me' ? [18, 18] : [30, 30],
-    iconAnchor: kind === 'me' ? [9, 9] : [15, 30],
-    popupAnchor: [0, -28],
-  });
-
-// ---------- realtime ----------
-
-function connectEvents() {
-  state.events?.close();
-  if (!state.token) return;
-  const es = new EventSource(`/api/events?token=${encodeURIComponent(state.token)}`);
-  es.addEventListener('notification', (e) => {
-    const n = JSON.parse(e.data);
-    state.notifications.unshift(n);
-    state.unread += 1;
-    updateBell();
-    toast(n.title, n.body);
-  });
-  es.addEventListener('booking', (e) => {
-    const booking = JSON.parse(e.data);
-    const idx = state.bookings.findIndex((b) => b.id === booking.id);
-    if (idx >= 0) state.bookings[idx] = booking;
-    else state.bookings.unshift(booking);
-    onBookingChanged(booking);
-  });
-  es.addEventListener('chat', (e) => {
-    const { bookingId, message } = JSON.parse(e.data);
-    const booking = state.bookings.find((b) => b.id === bookingId);
-    if (booking && !booking.chat.some((m) => m.id === message.id)) booking.chat.push(message);
-    appendChatMessage(bookingId, message);
-  });
-  es.addEventListener('location', (e) => {
-    const data = JSON.parse(e.data);
-    const booking = state.bookings.find((b) => b.id === data.bookingId);
-    if (booking) Object.assign(booking, { providerPos: data.providerPos, customerPos: data.customerPos });
-    updateTrackingMarkers(data.bookingId);
-  });
-  es.onerror = () => {
-    if (!state.token) es.close();
-  };
-  state.events = es;
-}
-
-// ---------- session ----------
-
-async function signIn(email, password) {
-  const { token, user } = await api('/api/auth/login', { method: 'POST', body: { email, password } });
-  state.token = token;
-  state.user = user;
-  localStorage.setItem(TOKEN_KEY, token);
-  await loadSessionData();
-  connectEvents();
-  location.hash = defaultRoute();
-  render();
-}
-
-function signOut(callServer = true) {
-  if (callServer && state.token) api('/api/auth/logout', { method: 'POST' }).catch(() => {});
-  stopSharingLocation();
-  state.events?.close();
-  Object.assign(state, { token: null, user: null, bookings: [], notifications: [], unread: 0 });
-  localStorage.removeItem(TOKEN_KEY);
-  location.hash = '';
-  render();
-}
-
-async function loadSessionData() {
-  const [bookings, notifications, categories] = await Promise.all([
-    api('/api/bookings'),
-    api('/api/notifications'),
-    api('/api/categories'),
-  ]);
-  state.bookings = bookings.bookings;
-  state.notifications = notifications.notifications;
-  state.unread = notifications.unread;
-  state.categories = categories.categories;
-}
-
-const defaultRoute = () => (state.user?.role === 'admin' ? '#/admin' : state.user?.role === 'provider' ? '#/bookings' : '#/explore');
-
-// ---------- router ----------
-
-function parseRoute() {
-  const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
-  return { name: parts[0] || '', id: parts[1] || null };
-}
-
-const isStale = (route) => {
-  const now = parseRoute();
-  return now.name !== route.name || now.id !== route.id || !document.getElementById('view');
-};
-
-function render() {
-  destroyMaps();
-  closeDrawer();
-  if (!state.user) return renderLogin();
-
-  const route = parseRoute();
-  const role = state.user.role;
-  const allowed = {
-    customer: ['explore', 'provider', 'bookings', 'booking'],
-    provider: ['bookings', 'booking'],
-    admin: ['admin', 'booking', 'provider'],
-  }[role];
-  if (!allowed.includes(route.name)) {
-    location.replace(defaultRoute());
-    return;
-  }
-
-  if (role === 'admin') renderAdminShell(route);
-  else renderNavShell(route);
-
-  const $view = document.getElementById('view');
-  const views = {
-    explore: renderExplore,
-    provider: renderProviderDetail,
-    bookings: renderBookings,
-    booking: renderBookingDetail,
-    admin: renderAdmin,
-  };
-  views[route.name]($view, route);
-  window.scrollTo(0, 0);
-}
-
-window.addEventListener('hashchange', render);
-
-// ---------- login ----------
-
-function renderLogin() {
-  $app.innerHTML = `
-    <main class="auth">
-      <section class="auth-hero">
-        <div class="brand"><img src="/assets/andallo-logo.png" alt="" /> Andallo</div>
-        <div class="hero-copy">
-          <h1>Jasa terpercaya, <span>dekat</span> dari rumahmu.</h1>
-          <p class="lead">Cari penyedia jasa terverifikasi, cek jadwal yang masih kosong, lalu pantau kedatangannya secara langsung.</p>
-          <div class="auth-points">
-            <div>${icon('shield')} Penyedia terverifikasi dengan harga transparan</div>
-            <div>${icon('clock')} Konfirmasi pesanan maksimal 2 menit</div>
-            <div>${icon('pin')} Live tracking dan chat langsung dengan penyedia</div>
-          </div>
-        </div>
-        <p class="small" style="opacity:.6">© ${new Date().getFullYear()} Andallo</p>
-      </section>
-      <section class="auth-panel">
-        <form class="auth-form" id="login-form" novalidate>
-          <div>
-            <h2>Masuk ke Andallo</h2>
-            <p class="muted">Gunakan akun kamu atau pilih akun demo di bawah.</p>
-          </div>
-          <div class="field">
-            <label for="email">Email</label>
-            <input class="input" id="email" name="email" type="email" autocomplete="username" required placeholder="nama@email.com" />
-          </div>
-          <div class="field">
-            <label for="password">Kata sandi</label>
-            <input class="input" id="password" name="password" type="password" autocomplete="current-password" required placeholder="••••••••" />
-          </div>
-          <p class="form-error" id="login-error" role="alert"></p>
-          <button class="btn btn-primary btn-block" type="submit" id="login-submit">Masuk</button>
-          <div class="divider">Akun demo · kata sandi demo123</div>
-          <div class="demo-accounts">
-            ${DEMO_ACCOUNTS.map(
-              (a) => `
-              <button type="button" class="demo-account" data-email="${a.email}">
-                <span class="avatar">${initials(a.name)}</span>
-                <span><strong>${esc(ROLE_LABEL[a.role])}</strong><br /><span class="small muted">${esc(a.email)}</span></span>
-              </button>`,
-            ).join('')}
-          </div>
-        </form>
-      </section>
-    </main>`;
-
-  const form = document.getElementById('login-form');
-  const $err = document.getElementById('login-error');
-  const $btn = document.getElementById('login-submit');
-  const submit = async (email, password) => {
-    $err.textContent = '';
-    if (!email || !password) {
-      $err.textContent = 'Email dan kata sandi wajib diisi.';
-      return;
-    }
-    $btn.disabled = true;
-    $btn.textContent = 'Memproses…';
-    try {
-      await signIn(email, password);
-    } catch (err) {
-      $err.textContent = err.message;
-      $btn.disabled = false;
-      $btn.textContent = 'Masuk';
-    }
-  };
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    submit(form.email.value.trim(), form.password.value);
-  });
-  form.querySelectorAll('.demo-account').forEach((btn) =>
-    btn.addEventListener('click', () => {
-      form.email.value = btn.dataset.email;
-      form.password.value = 'demo123';
-      submit(btn.dataset.email, 'demo123');
-    }),
-  );
-}
-
-// ---------- shells ----------
-
-const pendingCount = () => state.bookings.filter((b) => b.status === 'PENDING').length;
-
-function navLinks(route) {
-  const role = state.user.role;
-  const links =
-    role === 'customer'
-      ? [
-          { href: '#/explore', label: 'Cari Jasa', icon: 'search', active: ['explore', 'provider'] },
-          { href: '#/bookings', label: 'Pesanan Saya', icon: 'calendar', active: ['bookings', 'booking'] },
-        ]
-      : [{ href: '#/bookings', label: 'Pesanan', icon: 'calendar', active: ['bookings', 'booking'], count: pendingCount() }];
-  return links
-    .map(
-      (l) =>
-        `<a class="nav-link ${l.active.includes(route.name) ? 'active' : ''}" href="${l.href}">${icon(l.icon)} ${l.label}${
-          l.count ? ` <span class="nav-count" data-pending-count>${l.count}</span>` : ''
-        }</a>`,
-    )
-    .join('');
-}
-
-function bellButton() {
-  return `<button class="btn icon-btn" id="bell" aria-label="Notifikasi">${icon('bell', 20)}<span class="bell-dot" id="bell-dot" ${
-    state.unread ? '' : 'hidden'
-  }>${state.unread > 9 ? '9+' : state.unread}</span></button>`;
-}
-
-function renderNavShell(route) {
-  const u = state.user;
-  $app.innerHTML = `
-    <header class="topbar">
-      <div class="topbar-inner">
-        <a class="logo" href="${defaultRoute()}"><img src="/assets/andallo-logo.png" alt="" /><span>Andallo<small>${
-          u.role === 'provider' ? 'Dashboard Mitra' : 'Jasa di sekitarmu'
-        }</small></span></a>
-        <nav class="nav" aria-label="Navigasi utama">${navLinks(route)}</nav>
-        <div class="spacer"></div>
-        ${bellButton()}
-        <div class="user-chip">
-          <span class="avatar">${initials(u.name)}</span>
-          <span class="who"><strong>${esc(u.name)}</strong><span>${ROLE_LABEL[u.role]}</span></span>
-        </div>
-        <button class="btn btn-ghost icon-btn" id="logout" aria-label="Keluar" title="Keluar">${icon('logout')}</button>
-      </div>
-    </header>
-    <main class="page" id="view"></main>
-    <nav class="bottom-nav" aria-label="Navigasi bawah">${navLinks(route)}</nav>`;
-  bindShell();
-}
-
-function renderAdminShell(route) {
-  const u = state.user;
-  const tab = route.name === 'admin' ? route.id || 'overview' : 'bookings';
-  const links = [
-    { id: 'overview', label: 'Ringkasan', icon: 'grid' },
-    { id: 'bookings', label: 'Pesanan', icon: 'calendar', count: pendingCount() },
-    { id: 'providers', label: 'Penyedia', icon: 'store' },
-    { id: 'users', label: 'Pengguna', icon: 'users' },
-  ];
-  $app.innerHTML = `
-    <div class="admin" id="admin-shell">
-      <aside class="sidebar" aria-label="Menu admin">
-        <a class="logo" href="#/admin"><img src="/assets/andallo-logo.png" alt="" /><span>Andallo<small>Panel Admin</small></span></a>
-        ${links
-          .map(
-            (l) =>
-              `<a class="side-link ${tab === l.id ? 'active' : ''}" href="#/admin${l.id === 'overview' ? '' : '/' + l.id}">${icon(l.icon)} ${l.label}${
-                l.count ? `<span class="nav-count" data-pending-count>${l.count}</span>` : ''
-              }</a>`,
-          )
-          .join('')}
-        <div class="side-footer">
-          <div class="user-chip"><span class="avatar">${initials(u.name)}</span><span class="who"><strong>${esc(u.name)}</strong><span>${esc(u.email)}</span></span></div>
-          <button class="btn btn-ghost" id="logout">${icon('logout')} Keluar</button>
-        </div>
-      </aside>
-      <div class="admin-main">
-        <header class="topbar">
-          <div class="topbar-inner">
-            <button class="btn btn-ghost icon-btn admin-top" id="menu-toggle" aria-label="Buka menu">${icon('menu')}</button>
-            <strong>${esc(links.find((l) => l.id === tab)?.label || 'Admin')}</strong>
-            <div class="spacer"></div>
-            ${bellButton()}
-          </div>
-        </header>
-        <main class="page" id="view"></main>
-      </div>
-    </div>`;
-  bindShell();
-  const shell = document.getElementById('admin-shell');
-  document.getElementById('menu-toggle').addEventListener('click', () => shell.classList.toggle('menu-open'));
-  shell.addEventListener('click', (e) => {
-    if (shell.classList.contains('menu-open') && !e.target.closest('.sidebar') && !e.target.closest('#menu-toggle')) {
-      shell.classList.remove('menu-open');
-    }
-  });
-}
-
-function bindShell() {
-  document.getElementById('logout').addEventListener('click', () => signOut());
-  document.getElementById('bell').addEventListener('click', openNotifications);
-}
-
-function updateBell() {
-  const dot = document.getElementById('bell-dot');
-  if (!dot) return;
-  dot.hidden = !state.unread;
-  dot.textContent = state.unread > 9 ? '9+' : state.unread;
-}
-
-function updatePendingCounts() {
-  const count = pendingCount();
-  document.querySelectorAll('[data-pending-count]').forEach((el) => {
-    el.textContent = count;
-    el.hidden = !count;
-  });
-}
-
-// ---------- notifications drawer ----------
-
-function openNotifications() {
-  $modal.innerHTML = `
-    <div class="drawer-backdrop" id="drawer-backdrop">
-      <aside class="drawer" role="dialog" aria-modal="true" aria-label="Notifikasi">
-        <div class="drawer-head">
-          <strong>Notifikasi</strong>
-          <div class="spacer"></div>
-          <button class="btn btn-ghost icon-btn" id="drawer-close" aria-label="Tutup">${icon('x')}</button>
-        </div>
-        <div class="drawer-body">
-          ${
-            state.notifications.length
-              ? state.notifications
-                  .map(
-                    (n) => `
-                <a class="notif ${n.read ? '' : 'unread'}" href="${n.bookingId ? `#/booking/${n.bookingId}` : '#'}">
-                  <strong>${esc(n.title)}</strong>
-                  <p>${esc(n.body)}</p>
-                  <time datetime="${esc(n.createdAt)}">${fmtRelative(n.createdAt)}</time>
-                </a>`,
-                  )
-                  .join('')
-              : `<div class="empty">${icon('bell', 36)}<h3>Belum ada notifikasi</h3><p>Update pesanan, chat, dan status akan muncul di sini secara real-time.</p></div>`
-          }
-        </div>
-      </aside>
-    </div>`;
-  const close = () => closeDrawer();
-  document.getElementById('drawer-close').addEventListener('click', close);
-  document.getElementById('drawer-backdrop').addEventListener('click', (e) => {
-    if (e.target.id === 'drawer-backdrop' || e.target.closest('.notif')) close();
-  });
-  document.addEventListener('keydown', escClose);
-  if (state.unread) {
-    api('/api/notifications/read', { method: 'POST' }).catch(() => {});
-    state.notifications.forEach((n) => (n.read = true));
-    state.unread = 0;
-    updateBell();
-  }
-}
-
-function escClose(e) {
-  if (e.key === 'Escape') closeDrawer();
-}
-
-function closeDrawer() {
-  $modal.innerHTML = '';
-  document.removeEventListener('keydown', escClose);
-}
-
-// ---------- customer: explore ----------
-
-function requestOrigin() {
-  return new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve(null);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => resolve(null),
-      { timeout: 8000, maximumAge: 60000 },
-    );
-  });
-}
-
-function renderExplore($view) {
-  const f = state.filters;
-  $view.innerHTML = `
-    <section class="hero-search">
-      <h1>Halo, ${esc(state.user.name.split(' ')[0])}! Butuh jasa apa hari ini?</h1>
-      <p>Bandingkan harga, rating, dan jarak penyedia terdekat sebelum memesan.</p>
-      <form class="search-bar" id="search-form" role="search">
-        <label class="sr-only" for="q">Cari jasa</label>
-        <input class="input" id="q" name="q" placeholder="Cari potong rambut, cleaning, servis AC, fotografer…" value="${esc(f.q)}" />
-        <button class="btn btn-accent" type="submit">${icon('search')} Cari</button>
-      </form>
-    </section>
-    <div class="filters">
-      <div class="chips" id="category-chips">
-        <button class="chip ${f.category ? '' : 'active'}" data-category="">Semua</button>
-        ${state.categories.map((c) => `<button class="chip ${f.category === c ? 'active' : ''}" data-category="${esc(c)}">${esc(c)}</button>`).join('')}
-      </div>
-      <label class="sr-only" for="sort">Urutkan</label>
-      <select class="input" id="sort">
-        <option value="distance" ${f.sort === 'distance' ? 'selected' : ''}>Terdekat</option>
-        <option value="rating" ${f.sort === 'rating' ? 'selected' : ''}>Rating tertinggi</option>
-        <option value="price_asc" ${f.sort === 'price_asc' ? 'selected' : ''}>Harga terendah</option>
-        <option value="price_desc" ${f.sort === 'price_desc' ? 'selected' : ''}>Harga tertinggi</option>
-      </select>
-    </div>
-    <div class="location-note" id="location-note"></div>
-    <div class="explore">
-      <section aria-label="Daftar penyedia"><div id="provider-results"></div></section>
-      <aside class="card explore-map"><div class="map" id="explore-map"></div></aside>
-    </div>`;
-
-  const map = makeMap(document.getElementById('explore-map'), state.origin || DEFAULT_ORIGIN, 13);
-  const layer = map ? L.layerGroup().addTo(map) : null;
-
-  const renderLocationNote = () => {
-    document.getElementById('location-note').innerHTML = state.origin
-      ? `${icon('pin', 16)} Jarak dihitung dari lokasi kamu saat ini.`
-      : `${icon('pin', 16)} Jarak dihitung dari pusat Bekasi. <button class="btn btn-sm" id="use-location">${icon('locate', 16)} Gunakan lokasi saya</button>`;
-    document.getElementById('use-location')?.addEventListener('click', async (e) => {
-      e.target.disabled = true;
-      const origin = await requestOrigin();
-      if (!origin) {
-        toast('Lokasi tidak tersedia', 'Izinkan akses lokasi di browser untuk menghitung jarak dari posisimu.', 'error');
-        e.target.disabled = false;
-        return;
-      }
-      state.origin = origin;
-      renderLocationNote();
-      load();
-    });
-  };
-  renderLocationNote();
-
-  const $results = document.getElementById('provider-results');
-  let requestId = 0;
-  async function load() {
-    const current = ++requestId;
-    $results.innerHTML = `<div class="provider-grid">${'<div class="skeleton skeleton-card"></div>'.repeat(6)}</div>`;
-    const params = new URLSearchParams({ sort: f.sort });
-    if (f.q) params.set('q', f.q);
-    if (f.category) params.set('category', f.category);
-    if (state.origin) {
-      params.set('lat', state.origin.lat);
-      params.set('lng', state.origin.lng);
-    }
-    try {
-      const { providers, origin } = await api(`/api/providers?${params}`);
-      if (current !== requestId) return;
-      if (!providers.length) {
-        $results.innerHTML = `<div class="card empty">${icon('search', 40)}<h3>Belum ada penyedia yang cocok</h3><p>Coba kata kunci lain atau pilih kategori “Semua”.</p><button class="btn" id="reset-filters">Reset pencarian</button></div>`;
-        document.getElementById('reset-filters').addEventListener('click', () => {
-          Object.assign(f, { q: '', category: '' });
-          render();
-        });
-      } else {
-        $results.innerHTML = `<p class="muted small" style="margin-bottom:10px">${providers.length} penyedia ditemukan</p><div class="provider-grid">${providers.map(providerCard).join('')}</div>`;
-      }
-      if (layer && mapAlive(map)) {
-        layer.clearLayers();
-        L.marker([origin.lat, origin.lng], { icon: pinIcon('me') }).bindPopup('Lokasi kamu').addTo(layer);
-        const bounds = [[origin.lat, origin.lng]];
-        for (const p of providers) {
-          bounds.push([p.lat, p.lng]);
-          L.marker([p.lat, p.lng], { icon: pinIcon('provider') })
-            .bindPopup(`<strong>${esc(p.name)}</strong><br>${esc(p.service)} · ${rupiah(p.price)}<br><a href="#/provider/${p.id}">Lihat & pesan</a>`)
-            .addTo(layer);
-        }
-        map.fitBounds(bounds, { padding: [30, 30], maxZoom: 14 });
-      }
-    } catch (err) {
-      if (current !== requestId) return;
-      $results.innerHTML = `<div class="error-box">${esc(err.message)} <button class="btn btn-sm" id="retry">Coba lagi</button></div>`;
-      document.getElementById('retry').addEventListener('click', load);
-    }
-  }
-
-  document.getElementById('search-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    f.q = e.target.q.value.trim();
-    load();
-  });
-  document.getElementById('category-chips').addEventListener('click', (e) => {
-    const chip = e.target.closest('[data-category]');
-    if (!chip) return;
-    f.category = chip.dataset.category;
-    document.querySelectorAll('#category-chips .chip').forEach((c) => c.classList.toggle('active', c === chip));
-    load();
-  });
-  document.getElementById('sort').addEventListener('change', (e) => {
-    f.sort = e.target.value;
-    load();
-  });
-  $results.addEventListener('click', (e) => {
-    const card = e.target.closest('[data-provider]');
-    if (card) location.hash = `#/provider/${card.dataset.provider}`;
-  });
-  load();
-}
-
-function providerCard(p) {
+function serviceCard(service) {
   return `
-    <button class="card provider-card" data-provider="${p.id}" aria-label="${esc(p.name)}, ${esc(p.service)}">
-      <div class="thumb">
-        <img src="${esc(p.image)}" alt="" loading="lazy" />
-        <span class="distance">${p.distanceKm.toLocaleString('id-ID')} km</span>
-      </div>
+    <article class="card service-card">
+      <a class="media" href="#/jasa/${service.id}">
+        <img src="${esc(service.images?.[0])}" alt="" />
+        ${service.providerVerified ? '<span class="badge">Terverifikasi</span>' : ''}
+      </a>
       <div class="body">
-        <span class="muted small">${esc(p.category)}</span>
-        <h3>${esc(p.name)}</h3>
-        <div class="meta"><span class="stars">${starIcon()} <span>${p.rating.toFixed(1)}</span></span><span>(${p.reviews} ulasan)</span><span>·</span><span>${esc(p.city)}</span></div>
-        <div class="meta"><span>${esc(p.service)}</span><span class="spacer"></span><span class="price">${rupiah(p.price)}</span></div>
-      </div>
-    </button>`;
-}
-
-// ---------- provider detail + booking ----------
-
-async function renderProviderDetail($view, route) {
-  $view.innerHTML = `<div class="detail"><div class="skeleton" style="height:420px"></div><div class="skeleton" style="height:520px"></div></div>`;
-  let provider;
-  let booked;
-  try {
-    const data = await api(`/api/providers/${encodeURIComponent(route.id)}`);
-    provider = data.provider;
-    booked = new Set(data.bookedDates);
-  } catch (err) {
-    if (isStale(route)) return;
-    $view.innerHTML = `<div class="card empty">${icon('store', 40)}<h3>Penyedia tidak ditemukan</h3><p>${esc(err.message)}</p><a class="btn" href="${defaultRoute()}">Kembali</a></div>`;
-    return;
-  }
-  if (isStale(route)) return;
-  const origin = state.origin || DEFAULT_ORIGIN;
-  const distance = haversine(origin, provider).toFixed(1);
-  const isCustomer = state.user.role === 'customer';
-
-  $view.innerHTML = `
-    <a class="btn btn-ghost btn-sm" href="${isCustomer ? '#/explore' : '#/admin/providers'}" style="margin-bottom:12px">${icon('back', 16)} Kembali</a>
-    <div class="detail">
-      <article class="card" style="overflow:hidden">
-        <div class="detail-cover"><img src="${esc(provider.image)}" alt="Foto layanan ${esc(provider.name)}" /></div>
-        <div class="detail-info">
-          <span class="muted small">${esc(provider.category)} · ${esc(provider.city)}</span>
-          <h1>${esc(provider.name)}</h1>
-          <div class="row"><span class="stars">${starIcon(16)} <span>${provider.rating.toFixed(1)}</span></span><span class="muted">${provider.reviews} ulasan</span><span class="badge badge-ACCEPTED">${esc(provider.available)}</span></div>
-          <p>${esc(provider.desc)}</p>
-          <dl class="kv">
-            <div><dt>Layanan</dt><dd>${esc(provider.service)}</dd></div>
-            <div><dt>Harga mulai</dt><dd>${rupiah(provider.price)}</dd></div>
-            <div><dt>Jarak</dt><dd>${distance} km</dd></div>
-          </dl>
-          <div class="mini-map" id="provider-map"></div>
+        <p class="small muted">${esc(service.categoryName)} · ${esc(service.city)}${service.distanceKm != null ? ` · ${service.distanceKm} km` : ''}</p>
+        <h3><a class="plain" href="#/jasa/${service.id}">${esc(service.name)}</a></h3>
+        <p class="small">${esc(service.providerName)}</p>
+        ${starRow(service.rating, service.reviewCount)}
+        <p class="small muted">Harga mulai <span class="price">${rupiah(service.price)}</span></p>
+        <div class="card-actions">
+          <a class="btn btn-sm" href="#/jasa/${service.id}">Lihat Detail</a>
+          <a class="btn btn-sm btn-primary" href="${bookHref(service.id)}">Pesan Sekarang</a>
         </div>
-      </article>
-      ${isCustomer ? bookingPanel(provider) : `<aside class="card booking-panel"><h2>Jadwal terisi</h2>${booked.size ? [...booked].map((d) => `<div class="row"><span class="badge badge-REJECTED">${fmtDate(d)}</span></div>`).join('') : '<p class="muted">Belum ada jadwal terisi.</p>'}</aside>`}
-    </div>`;
-
-  const map = makeMap(document.getElementById('provider-map'), provider, 14);
-  if (map) L.marker([provider.lat, provider.lng], { icon: pinIcon('provider') }).bindPopup(esc(provider.name)).addTo(map);
-  if (isCustomer) bindBookingPanel(provider, booked);
-}
-
-function haversine(a, b) {
-  const r = (d) => (d * Math.PI) / 180;
-  const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
-  return 2 * 6371 * Math.asin(Math.sqrt(h));
-}
-
-function bookingPanel(provider) {
-  return `
-    <aside class="card booking-panel">
-      <h2>Pesan ${esc(provider.service)}</h2>
-      <div class="calendar" id="calendar"></div>
-      <div class="legend"><span><i style="background:var(--green-700)"></i>Dipilih</span><span><i style="background:#fde8e8;border:1px solid #f5c2c2"></i>Sudah terisi</span><span><i style="background:#fff;border:1px solid var(--line)"></i>Tersedia</span></div>
-      <div class="field">
-        <label>Jam kedatangan</label>
-        <div class="times" id="times">${TIME_SLOTS.map((t) => `<button type="button" class="time" data-time="${t}">${t}</button>`).join('')}</div>
       </div>
-      <div class="field">
-        <label for="note">Catatan untuk penyedia <span class="muted">(opsional)</span></label>
-        <textarea class="input" id="note" maxlength="500" placeholder="Contoh: potong model undercut, rumah pagar hijau."></textarea>
-      </div>
-      <div class="summary">
-        <div><span class="muted">Tanggal</span><span id="sum-date">—</span></div>
-        <div><span class="muted">Jam</span><span id="sum-time">—</span></div>
-        <div><span>Total</span><strong>${rupiah(provider.price)}</strong></div>
-      </div>
-      <p class="form-error" id="booking-error" role="alert"></p>
-      <button class="btn btn-accent btn-block" id="book-btn" disabled>Pilih tanggal & jam</button>
-      <p class="muted small">Penyedia akan menerima atau menolak dalam maksimal 2 menit. Pembayaran belum terhubung payment gateway.</p>
-    </aside>`;
-}
-
-function bindBookingPanel(provider, booked) {
-  const selection = { date: null, time: null };
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  let month = new Date(today.getFullYear(), today.getMonth(), 1);
-
-  const $cal = document.getElementById('calendar');
-  const $btn = document.getElementById('book-btn');
-  const $err = document.getElementById('booking-error');
-
-  const refresh = () => {
-    document.getElementById('sum-date').textContent = selection.date ? fmtDate(selection.date) : '—';
-    document.getElementById('sum-time').textContent = selection.time || '—';
-    $btn.disabled = !(selection.date && selection.time);
-    $btn.textContent = $btn.disabled ? 'Pilih tanggal & jam' : 'Kirim pesanan';
-  };
-
-  const drawCalendar = () => {
-    const first = new Date(month);
-    const offset = (first.getDay() + 6) % 7;
-    const days = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
-    const isCurrentMonth = month.getFullYear() === today.getFullYear() && month.getMonth() === today.getMonth();
-    let cells = '<span class="blank day"></span>'.repeat(offset);
-    for (let d = 1; d <= days; d++) {
-      const date = new Date(month.getFullYear(), month.getMonth(), d);
-      const iso = localIso(date);
-      const past = date < today;
-      const isBooked = booked.has(iso);
-      const cls = past ? 'past' : isBooked ? 'booked' : selection.date === iso ? 'selected' : '';
-      cells += `<button type="button" class="day ${cls}" data-date="${iso}" ${past || isBooked ? 'disabled' : ''} aria-label="${fmtDate(iso)}${isBooked ? ', sudah terisi' : ''}">${d}</button>`;
-    }
-    $cal.innerHTML = `
-      <div class="calendar-head">
-        <button type="button" class="btn btn-ghost btn-sm" id="prev-month" ${isCurrentMonth ? 'disabled' : ''} aria-label="Bulan sebelumnya">${icon('back', 16)}</button>
-        <strong>${month.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</strong>
-        <button type="button" class="btn btn-ghost btn-sm" id="next-month" aria-label="Bulan berikutnya" style="transform:scaleX(-1)">${icon('back', 16)}</button>
-      </div>
-      <div class="calendar-grid">${['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((d) => `<span class="dow">${d}</span>`).join('')}${cells}</div>`;
-    document.getElementById('prev-month').onclick = () => {
-      month = new Date(month.getFullYear(), month.getMonth() - 1, 1);
-      drawCalendar();
-    };
-    document.getElementById('next-month').onclick = () => {
-      month = new Date(month.getFullYear(), month.getMonth() + 1, 1);
-      drawCalendar();
-    };
-  };
-
-  $cal.addEventListener('click', (e) => {
-    const day = e.target.closest('[data-date]');
-    if (!day || day.disabled) return;
-    selection.date = day.dataset.date;
-    drawCalendar();
-    refresh();
-  });
-  document.getElementById('times').addEventListener('click', (e) => {
-    const t = e.target.closest('[data-time]');
-    if (!t) return;
-    selection.time = t.dataset.time;
-    document.querySelectorAll('#times .time').forEach((b) => b.classList.toggle('selected', b === t));
-    refresh();
-  });
-  $btn.addEventListener('click', async () => {
-    $err.textContent = '';
-    $btn.disabled = true;
-    $btn.textContent = 'Mengirim…';
-    try {
-      const { booking } = await api('/api/bookings', {
-        method: 'POST',
-        body: {
-          providerId: provider.id,
-          date: selection.date,
-          time: selection.time,
-          note: document.getElementById('note').value,
-          destination: state.origin || undefined,
-        },
-      });
-      if (!state.bookings.some((b) => b.id === booking.id)) state.bookings.unshift(booking);
-      location.hash = `#/booking/${booking.id}`;
-    } catch (err) {
-      $err.textContent = err.message;
-      if (err.status === 409) {
-        booked.add(selection.date);
-        selection.date = null;
-        drawCalendar();
-      }
-      refresh();
-    }
-  });
-
-  drawCalendar();
-  refresh();
-}
-
-// ---------- bookings list ----------
-
-const BOOKING_TABS = [
-  { id: 'active', label: 'Aktif', match: (b) => ['PENDING', 'ACCEPTED', 'ON_THE_WAY', 'IN_PROGRESS'].includes(b.status) },
-  { id: 'done', label: 'Selesai', match: (b) => b.status === 'SELESAI' },
-  { id: 'closed', label: 'Dibatalkan / Ditolak', match: (b) => ['REJECTED', 'EXPIRED', 'CANCELLED'].includes(b.status) },
-];
-let bookingTab = 'active';
-
-function renderBookings($view) {
-  const isProvider = state.user.role === 'provider';
-  const pending = state.bookings.filter((b) => b.status === 'PENDING');
-  const tab = BOOKING_TABS.find((t) => t.id === bookingTab);
-  const list = state.bookings.filter(tab.match);
-
-  $view.innerHTML = `
-    <div class="page-head">
-      <div>
-        <h1>${isProvider ? 'Pesanan Masuk' : 'Pesanan Saya'}</h1>
-        <p>${isProvider ? 'Terima atau tolak pesanan baru dalam 2 menit, lalu perbarui status layanan.' : 'Pantau status, chat, dan live tracking semua pesananmu.'}</p>
-      </div>
-      ${isProvider ? '' : `<a class="btn btn-primary" href="#/explore">${icon('search')} Pesan jasa baru</a>`}
-    </div>
-    ${
-      isProvider && pending.length
-        ? `<section class="stack" style="margin-bottom:24px"><h2 style="font-size:1.05rem">Butuh respons sekarang (${pending.length})</h2><div class="booking-list">${pending.map(bookingItem).join('')}</div></section>`
-        : ''
-    }
-    <div class="tabs" role="tablist">
-      ${BOOKING_TABS.map((t) => `<button class="chip ${t.id === bookingTab ? 'active' : ''}" role="tab" aria-selected="${t.id === bookingTab}" data-tab="${t.id}">${t.label} (${state.bookings.filter(t.match).length})</button>`).join('')}
-    </div>
-    <div class="booking-list">
-      ${
-        list.length
-          ? list.map(bookingItem).join('')
-          : `<div class="card empty">${icon('calendar', 40)}<h3>${bookingTab === 'active' ? 'Belum ada pesanan aktif' : 'Belum ada pesanan di sini'}</h3><p>${
-              isProvider ? 'Pesanan baru dari customer akan muncul otomatis secara real-time.' : 'Temukan penyedia terdekat dan pesan jadwal yang masih tersedia.'
-            }</p>${isProvider ? '' : '<a class="btn btn-primary" href="#/explore">Cari jasa</a>'}</div>`
-      }
-    </div>`;
-
-  $view.querySelector('.tabs').addEventListener('click', (e) => {
-    const t = e.target.closest('[data-tab]');
-    if (!t) return;
-    bookingTab = t.dataset.tab;
-    renderBookings($view);
-  });
-  bindBookingActions($view);
-}
-
-function bookingItem(b) {
-  const isCustomer = state.user.role === 'customer';
-  const who = isCustomer ? b.provider?.name : b.customer?.name;
-  return `
-    <article class="card booking-item" data-booking-row="${b.id}">
-      <img src="${esc(b.provider?.image)}" alt="" loading="lazy" />
-      <div>
-        <div class="row" style="gap:8px"><h3>${esc(who)}</h3><span class="badge badge-${b.status}">${esc(b.statusLabel)}</span></div>
-        <p class="muted small">#${b.id} · ${esc(b.provider?.service)} · ${fmtDate(b.date)} ${esc(b.time)} · ${rupiah(b.total)}</p>
-        ${b.note ? `<p class="small" style="margin-top:4px">“${esc(b.note)}”</p>` : ''}
-        ${b.status === 'PENDING' ? countdownHtml(b) : ''}
-      </div>
-      <div class="actions">${bookingActions(b)}</div>
     </article>`;
 }
 
-function countdownHtml(b) {
-  return `<p class="small" style="margin-top:6px">Sisa waktu respons: <span class="countdown" data-countdown="${esc(b.approvalExpiresAt)}">--:--</span></p><div class="countdown-bar"><span data-countdown-bar="${esc(b.approvalExpiresAt)}"></span></div>`;
-}
-
-function bookingActions(b, { detail = false } = {}) {
-  const role = state.user.role;
-  const buttons = [];
-  if (b.status === 'PENDING' && role !== 'customer') {
-    buttons.push(`<button class="btn btn-primary btn-sm" data-decision="accept" data-id="${b.id}">${icon('check', 16)} Terima</button>`);
-    buttons.push(`<button class="btn btn-danger btn-sm" data-decision="reject" data-id="${b.id}">${icon('x', 16)} Tolak</button>`);
-  }
-  if (NEXT_ACTION[b.status] && role !== 'customer') {
-    buttons.push(`<button class="btn btn-primary btn-sm" data-status="${NEXT_ACTION[b.status].status}" data-id="${b.id}">${NEXT_ACTION[b.status].label}</button>`);
-  }
-  if (role === 'customer' && ['PENDING', 'ACCEPTED'].includes(b.status)) {
-    buttons.push(`<button class="btn btn-danger btn-sm" data-status="CANCELLED" data-id="${b.id}">Batalkan</button>`);
-  }
-  if (role === 'admin' && ['ACCEPTED', 'ON_THE_WAY', 'IN_PROGRESS'].includes(b.status)) {
-    buttons.push(`<button class="btn btn-danger btn-sm" data-status="CANCELLED" data-id="${b.id}">Batalkan</button>`);
-  }
-  if (!detail) buttons.push(`<a class="btn btn-sm" href="#/booking/${b.id}">${icon('chat', 16)} Detail</a>`);
-  return buttons.join('');
-}
-
-function bindBookingActions(root) {
-  root.addEventListener('click', async (e) => {
-    const btn = e.target.closest('[data-decision], [data-status]');
-    if (!btn) return;
-    const id = btn.dataset.id;
-    if (btn.dataset.status === 'CANCELLED' && !confirm('Batalkan pesanan ini?')) return;
-    btn.disabled = true;
-    try {
-      const { booking } = btn.dataset.decision
-        ? await api(`/api/bookings/${id}/decision`, { method: 'POST', body: { decision: btn.dataset.decision } })
-        : await api(`/api/bookings/${id}/status`, { method: 'POST', body: { status: btn.dataset.status } });
-      const idx = state.bookings.findIndex((b) => b.id === booking.id);
-      if (idx >= 0) state.bookings[idx] = booking;
-      onBookingChanged(booking);
-    } catch (err) {
-      toast('Gagal memperbarui pesanan', err.message, 'error');
-      btn.disabled = false;
-    }
-  });
-}
-
-function onBookingChanged(booking) {
-  updatePendingCounts();
-  const route = parseRoute();
-  const $view = document.getElementById('view');
-  if (!$view) return;
-  if (route.name === 'bookings') renderBookings($view);
-  else if (route.name === 'admin' && (route.id === 'bookings' || !route.id)) renderAdmin($view, route);
-  else if (route.name === 'booking' && Number(route.id) === booking.id) refreshBookingDetail(booking);
-}
-
-// ---------- booking detail (tracking, chat, rating) ----------
-
-let tracking = null;
-
-async function renderBookingDetail($view, route) {
-  tracking = null;
-  $view.innerHTML = `<div class="booking-detail"><div class="skeleton" style="height:520px"></div><div class="skeleton" style="height:520px"></div></div>`;
-  let booking;
-  try {
-    booking = (await api(`/api/bookings/${encodeURIComponent(route.id)}`)).booking;
-  } catch (err) {
-    if (isStale(route)) return;
-    $view.innerHTML = `<div class="card empty">${icon('calendar', 40)}<h3>Pesanan tidak ditemukan</h3><p>${esc(err.message)}</p><a class="btn" href="${defaultRoute()}">Kembali</a></div>`;
-    return;
-  }
-  const idx = state.bookings.findIndex((b) => b.id === booking.id);
-  if (idx >= 0) state.bookings[idx] = booking;
-  else state.bookings.unshift(booking);
-
-  const role = state.user.role;
-  let templates = [];
-  if (role !== 'admin') templates = (await api('/api/chat-templates').catch(() => ({ templates: [] }))).templates;
-  if (isStale(route)) return;
-  const backHref = role === 'admin' ? '#/admin/bookings' : '#/bookings';
-  const counterpart = role === 'customer' ? booking.provider?.name : booking.customer?.name;
-
-  $view.innerHTML = `
-    <a class="btn btn-ghost btn-sm" href="${backHref}" style="margin-bottom:12px">${icon('back', 16)} Semua pesanan</a>
-    <div class="page-head">
-      <div>
-        <h1>Pesanan #${booking.id}</h1>
-        <p>${esc(booking.provider?.service)} · ${esc(counterpart)} · ${fmtDate(booking.date)} pukul ${esc(booking.time)}</p>
+function paintPublic(route) {
+  const user = state.user;
+  const active = route.parts[0] || '';
+  const links = [
+    ['', 'Beranda'],
+    ['jelajah', 'Jelajahi Jasa'],
+    ['cara-kerja', 'Cara Kerja'],
+    ['tentang', 'Tentang'],
+  ];
+  const account =
+    user?.role === 'admin'
+      ? `<a class="btn btn-sm btn-midnight" href="#/admin">Dasbor</a>`
+      : user
+        ? `<a class="${active === 'akun' ? 'active' : ''}" href="#/akun">Akun Saya</a>`
+        : `<a class="${active === 'masuk' ? 'active' : ''}" href="#/masuk">Masuk</a><a class="btn btn-sm btn-primary" href="#/daftar">Daftar</a>`;
+  document.getElementById('app').innerHTML = `
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="#/">${logo()}</a>
+        <button class="icon-btn menu-btn" id="menu-btn" aria-label="Menu">${icon('menu')}</button>
+        <nav class="nav-links" id="nav-links">
+          ${links.map(([href, label]) => `<a class="${active === href ? 'active' : ''}" href="#/${href}">${label}</a>`).join('')}
+          ${state.compare.length ? `<a class="${active === 'bandingkan' ? 'active' : ''}" href="#/bandingkan">Bandingkan (${state.compare.length})</a>` : ''}
+          ${account}
+          ${user ? '<button class="btn btn-sm btn-ghost" id="logout" type="button">Keluar</button>' : ''}
+        </nav>
       </div>
-      <div class="row" id="bd-actions"></div>
-    </div>
-    <div class="booking-detail">
-      <div class="stack">
-        <section class="card" style="overflow:hidden">
-          <div class="track-map" id="track-map"></div>
-          <div class="track-meta" id="bd-track-meta"></div>
-        </section>
-        <section class="card">
-          <div class="timeline" id="bd-timeline"></div>
-        </section>
-        <section class="card" id="bd-rating" hidden></section>
+    </header>
+    <main class="page" id="view"></main>
+    <footer class="footer"><div class="footer-inner"><div><strong>Andallo</strong><p class="muted">Andallo, jasa andalanmu setiap saat.</p></div><p class="small muted">Bandung · Jakarta · Bekasi · Tangerang · Depok</p></div></footer>`;
+  document.getElementById('menu-btn').onclick = () => document.getElementById('nav-links').classList.toggle('open');
+  document.getElementById('logout')?.addEventListener('click', logout);
+  return document.getElementById('view');
+}
+
+function paintAdmin(route) {
+  const section = route.parts[1] || '';
+  const links = [
+    ['', 'Ringkasan'],
+    ['penyedia', 'Penyedia'],
+    ['jasa', 'Jasa'],
+    ['kategori', 'Kategori'],
+    ['pesanan', 'Pesanan'],
+    ['ulasan', 'Ulasan'],
+    ['pelanggan', 'Pelanggan'],
+    ['pengaturan', 'Pengaturan'],
+  ];
+  document.getElementById('app').innerHTML = `
+    <div class="admin" id="admin-shell">
+      <aside class="side">
+        <a class="brand" href="#/">${logo()}</a>
+        ${links.map(([href, label]) => `<a class="${section === href ? 'active' : ''}" href="#/admin${href ? `/${href}` : ''}">${label}</a>`).join('')}
+        <div class="foot">
+          <p class="small muted">${esc(state.user.name)}</p>
+          <button class="btn btn-sm" id="logout" type="button">Keluar</button>
+          <a class="small" href="#/">Lihat situs</a>
+        </div>
+      </aside>
+      <div class="admin-main">
+        <button class="btn btn-sm admin-toggle" id="admin-toggle" type="button">${icon('menu')} Menu</button>
+        <div id="view"></div>
       </div>
-      <section class="card chat" aria-label="Chat pesanan">
-        <div class="chat-head"><span class="avatar">${initials(counterpart)}</span><div><strong>${esc(counterpart)}</strong><p class="muted small">${role === 'admin' ? 'Memantau percakapan' : 'Chat pesanan · dibantu AI Andallo'}</p></div></div>
-        <div class="chat-body" id="chat-body"></div>
-        ${
-          role === 'admin'
-            ? ''
-            : `<div class="chat-templates" id="chat-templates">${templates.map((t) => `<button class="chip" type="button">${esc(t)}</button>`).join('')}</div>
-        <form class="chat-form" id="chat-form">
-          <label class="sr-only" for="chat-input">Tulis pesan</label>
-          <input class="input" id="chat-input" maxlength="1000" autocomplete="off" placeholder="Tulis pesan…" />
-          <button class="btn btn-primary" type="submit" aria-label="Kirim">${icon('send')}</button>
-        </form>`
-        }
-      </section>
     </div>`;
+  document.getElementById('logout').onclick = logout;
+  document.getElementById('admin-toggle').onclick = () => document.getElementById('admin-shell').classList.toggle('open');
+  return document.getElementById('view');
+}
 
-  const chatBody = document.getElementById('chat-body');
-  chatBody.innerHTML = booking.chat.length ? booking.chat.map(chatMessageHtml).join('') : chatEmptyHtml();
-  chatBody.scrollTop = chatBody.scrollHeight;
+async function logout() {
+  await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+  setSession('', null);
+  location.hash = '/';
+}
 
-  const map = makeMap(document.getElementById('track-map'), booking.destination || DEFAULT_ORIGIN, 14);
-  tracking = { bookingId: booking.id, map, markers: {} };
-  updateTrackingMarkers(booking.id, true);
+async function pageHome(view, _route, stale) {
+  view.innerHTML = `<div class="skeleton-card"></div>`;
+  try {
+    const [{ services }] = await Promise.all([api('/api/services?featured=1&sort=rating')]);
+    if (stale()) return;
+    view.innerHTML = `
+      <section class="section" style="margin-top:8px">
+        <div class="section-head"><div><p class="kicker">Kategori</p><h2>Pilih jenis jasa</h2></div></div>
+        <div class="cat-grid">
+          ${state.categories
+            .map(
+              (category) => `<a class="card cat-card" href="#/jelajah?category=${category.id}">
+                <span class="cat-ico">${icon('search', 18)}</span>
+                <span><strong>${esc(category.name)}</strong><span class="small muted">${category.serviceCount} jasa</span></span>
+              </a>`,
+            )
+            .join('')}
+        </div>
+      </section>
+      <section class="section">
+        <div class="section-head"><div><p class="kicker">Pilihan Andallo</p><h2>Jasa yang sering dipesan</h2></div><a class="btn btn-sm" href="#/jelajah">Lihat semua</a></div>
+        ${services.length ? `<div class="card-grid">${services.map(serviceCard).join('')}</div>` : emptyState({ title: 'Belum ada jasa unggulan', text: 'Admin dapat menandai jasa sebagai unggulan.' })}
+      </section>
+      <section class="section">
+        <div class="section-head"><div><h2>Tiga langkah, tanpa pindah aplikasi</h2><p class="muted">Portofolio, harga, ulasan, dan pemesanan ada di halaman yang sama.</p></div></div>
+        <div class="steps">
+          <article class="card step"><em>01</em><h3>Cari</h3><p class="muted">Saring berdasarkan kota, harga, dan rating.</p></article>
+          <article class="card step"><em>02</em><h3>Bandingkan</h3><p class="muted">Lihat paket, ulasan pelanggan, dan portofolio.</p></article>
+          <article class="card step"><em>03</em><h3>Pesan</h3><p class="muted">Pilih jadwal. Status pesanan bisa dipantau di akun Anda.</p></article>
+        </div>
+      </section>`;
+  } catch (error) {
+    if (!stale()) view.innerHTML = errorBox(error.message);
+  }
+}
 
-  if (role !== 'admin') {
-    const form = document.getElementById('chat-form');
-    const input = document.getElementById('chat-input');
-    const send = async (text) => {
-      if (!text.trim()) return;
-      input.value = '';
+function homeHero() {
+  return `
+    <section class="hero">
+      <div class="hero-inner">
+        <div>
+          <p class="kicker">Andallo, jasa andalanmu setiap saat.</p>
+          <h1>Temukan Jasa Terbaik di Sekitarmu</h1>
+          <p class="lead">Temukan, bandingkan, dan pesan jasa terpercaya di satu tempat.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#/jelajah">Jelajahi Jasa</a>
+            <a class="btn" href="#/daftar" style="background:#fff">Daftar Sekarang</a>
+          </div>
+        </div>
+        <aside class="hero-note">
+          <strong>Tidak perlu berpindah-pindah media sosial.</strong>
+          <p>Harga, ulasan dari transaksi Andallo, dan portofolio penyedia dikumpulkan di satu halaman.</p>
+        </aside>
+      </div>
+    </section>
+    <form class="search-panel" id="home-search">
+      <input class="input" name="q" placeholder="Anda sedang mencari jasa apa?" aria-label="Anda sedang mencari jasa apa?" />
+      <select class="select" name="city" aria-label="Lokasi Anda">${cityOptions(state.city, 'Lokasi Anda')}</select>
+      <button class="btn btn-midnight" type="submit">${icon('search')} Cari</button>
+    </form>`;
+}
+
+async function pageExplore(view, route, stale) {
+  const params = route.params;
+  view.innerHTML = `
+    <div class="section-head"><div><h1 class="display" style="font-size:2.4rem">Jelajahi jasa</h1><p class="muted">Saring sesuai kebutuhan, lalu bandingkan sebelum memesan.</p></div></div>
+    <div class="filters">
+      <form class="card filter-card" id="filters">
+        <label class="field">Cari<input class="input" name="q" value="${esc(params.q || '')}" placeholder="Nama jasa atau penyedia" /></label>
+        <label class="field">Kategori<select class="select" name="category">${categoryOptions(params.category || '')}</select></label>
+        <label class="field">Lokasi<select class="select" name="city">${cityOptions(params.city || state.city)}</select></label>
+        <div class="two">
+          <label class="field">Harga min<input class="input" name="minPrice" type="number" min="0" value="${esc(params.minPrice || '')}" /></label>
+          <label class="field">Harga max<input class="input" name="maxPrice" type="number" min="0" value="${esc(params.maxPrice || '')}" /></label>
+        </div>
+        <label class="field">Rating minimal
+          <select class="select" name="minRating">
+            ${['', '3', '4', '4.5'].map((value) => `<option value="${value}" ${params.minRating === value ? 'selected' : ''}>${value ? `${value.replace('.', ',')} ke atas` : 'Semua'}</option>`).join('')}
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" name="available" ${params.available === '1' ? 'checked' : ''}/> Hanya yang tersedia</label>
+        <label class="field">Urutkan
+          <select class="select" name="sort">
+            ${[
+              ['recommended', 'Rekomendasi'],
+              ['price_asc', 'Harga terendah'],
+              ['rating', 'Rating tertinggi'],
+              ['nearest', 'Terdekat'],
+            ].map(([value, label]) => `<option value="${value}" ${(params.sort || 'recommended') === value ? 'selected' : ''}>${label}</option>`).join('')}
+          </select>
+        </label>
+        <button class="btn btn-primary" type="submit">Terapkan</button>
+        <button class="btn btn-sm" type="button" id="use-location">${icon('pin', 16)} Gunakan lokasi saya</button>
+      </form>
+      <div id="results">${skeletonCards()}</div>
+    </div>`;
+  const form = document.getElementById('filters');
+  const apply = () => {
+    const data = new FormData(form);
+    const next = new URLSearchParams();
+    for (const [key, value] of data.entries()) if (String(value).trim()) next.set(key, String(value).trim());
+    if (form.available.checked) next.set('available', '1');
+    setCity(String(data.get('city') || ''));
+    const hash = `/jelajah${next.toString() ? `?${next}` : ''}`;
+    if (location.hash.replace(/^#/, '') === hash) load();
+    else location.hash = hash;
+  };
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    apply();
+  };
+  document.getElementById('use-location').onclick = () => {
+    if (!navigator.geolocation) return toast('Lokasi tidak didukung', 'Browser ini tidak menyediakan lokasi.', 'error');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        toast('Lokasi tersimpan', 'Jarak dihitung dari posisi Anda.');
+        load();
+      },
+      () => toast('Lokasi ditolak', 'Izinkan akses lokasi untuk mengurutkan yang terdekat.', 'error'),
+      { timeout: 8000 },
+    );
+  };
+
+  async function load() {
+    const results = document.getElementById('results');
+    if (!results) return;
+    results.innerHTML = skeletonCards();
+    const query = new URLSearchParams();
+    for (const key of ['q', 'category', 'city', 'minPrice', 'maxPrice', 'minRating', 'available', 'sort']) {
+      if (route.params[key]) query.set(key, route.params[key]);
+    }
+    if (state.coords) {
+      query.set('lat', state.coords.lat);
+      query.set('lng', state.coords.lng);
+    }
+    try {
+      const { services } = await api(`/api/services?${query}`);
+      if (stale()) return;
+      results.innerHTML = services.length
+        ? `<p class="small muted" style="margin-bottom:10px">${services.length} jasa ditemukan</p><div class="card-grid">${services.map(serviceCard).join('')}</div>`
+        : emptyState({ title: 'Tidak ada jasa yang cocok', text: 'Coba longgarkan filter atau pilih kategori lain.', action: '<a class="btn" href="#/jelajah">Reset filter</a>' });
+    } catch (error) {
+      if (!stale()) results.innerHTML = errorBox(error.message);
+    }
+  }
+  load();
+}
+
+async function pageService(view, route, stale) {
+  view.innerHTML = skeletonCards(1);
+  try {
+    const data = await api(`/api/services/${route.parts[1]}`);
+    if (stale()) return;
+    let saved = false;
+    if (state.user?.role === 'customer') {
+      const mine = await api('/api/saved');
+      saved = mine.services.some((item) => item.id === data.service.id);
+    }
+    if (stale()) return;
+    const service = data.service;
+    view.innerHTML = `
+      <p class="small muted" style="margin-bottom:10px"><a href="#/jelajah">Jelajahi</a> / ${esc(service.categoryName)}</p>
+      <div class="layout">
+        <div class="stack">
+          <div class="cover"><img src="${esc(service.images[0])}" alt="${esc(service.name)}" /></div>
+          <div class="thumbs">${service.images.map((image, index) => `<button type="button" data-photo="${index}"><img src="${esc(image)}" alt="" /></button>`).join('')}</div>
+          <article class="card pad">
+            <p class="small muted">${esc(service.categoryName)} · ${esc(service.city)}</p>
+            <h1 class="display" style="font-size:2.2rem">${esc(service.name)}</h1>
+            <p><a href="#/penyedia/${service.providerId}">${esc(service.providerName)}</a> ${service.providerVerified ? '· Terverifikasi' : ''}</p>
+            ${starRow(service.rating, service.reviewCount)}
+            <p>${esc(service.description)}</p>
+            <p class="small muted">${icon('pin', 14)} ${esc(service.location)}</p>
+          </article>
+          <section>
+            <h2>Paket</h2>
+            <div class="packages" style="margin-top:10px">
+              ${service.packages
+                .map(
+                  (pkg) => `<a class="package" href="${bookHref(service.id)}">
+                    <strong>${esc(pkg.name)}</strong>
+                    <span class="muted small">${esc(pkg.description)} · ${esc(pkg.duration || '')}</span>
+                    <span class="price">${rupiah(pkg.price)}</span>
+                  </a>`,
+                )
+                .join('')}
+            </div>
+          </section>
+          <section>
+            <div class="section-head"><h2>Portofolio</h2><a href="#/penyedia/${service.providerId}">Lihat semua</a></div>
+            <div class="folio-grid">${data.portfolio.map((item, index) => folioCard(item, index)).join('') || '<p class="muted">Belum ada portofolio.</p>'}</div>
+          </section>
+          <section>
+            <h2>Ulasan</h2>
+            <div class="reviews" style="margin-top:10px">${data.reviews.map(reviewCard).join('') || '<p class="muted">Belum ada ulasan dari transaksi Andallo.</p>'}</div>
+          </section>
+        </div>
+        <aside class="card summary">
+          <p class="small muted">Harga mulai</p>
+          <p class="total">${rupiah(service.price)}</p>
+          <p class="small muted">Belum termasuk biaya platform ${data.quote.platformFeePercent}%.</p>
+          <a class="btn btn-primary btn-block" href="${bookHref(service.id)}">Pesan Sekarang</a>
+          <button class="btn btn-block" id="compare" type="button">${icon('arrow', 16)} ${state.compare.includes(service.id) ? 'Tersimpan di bandingkan' : 'Bandingkan'}</button>
+          <button class="btn btn-block" id="save" type="button">${icon('heart', 16)} ${saved ? 'Tersimpan' : 'Simpan'}</button>
+          <p class="small muted">${service.available ? 'Jadwal masih bisa dipilih.' : 'Saat ini tidak menerima pesanan baru.'}</p>
+        </aside>
+      </div>`;
+    view.querySelectorAll('[data-photo]').forEach((button) => {
+      button.onclick = () => lightbox(service.images.map((image) => ({ image, title: service.name })), Number(button.dataset.photo));
+    });
+    bindFolio(view, data.portfolio);
+    document.getElementById('compare').onclick = () => {
+      const result = toggleCompare(service.id);
+      if (!result.ok) return toast('Bandingkan', result.reason, 'error');
+      toast(result.saved ? 'Ditambahkan' : 'Dihapus dari daftar', 'Buka menu Bandingkan untuk melihatnya.');
+      draw();
+    };
+    document.getElementById('save').onclick = async () => {
+      if (state.user?.role !== 'customer') {
+        location.hash = `/masuk?lanjut=${encodeURIComponent(`/jasa/${service.id}`)}`;
+        return;
+      }
       try {
-        const { chat } = await api(`/api/bookings/${booking.id}/chat`, { method: 'POST', body: { text } });
-        const current = state.bookings.find((b) => b.id === booking.id);
-        if (current) current.chat = chat;
-        chat.forEach((m) => appendChatMessage(booking.id, m));
-      } catch (err) {
-        input.value = text;
-        toast('Pesan gagal dikirim', err.message, 'error');
+        if (saved) await api(`/api/saved/${service.id}`, { method: 'DELETE' });
+        else await api('/api/saved', { method: 'POST', body: { serviceId: service.id } });
+        toast(saved ? 'Dihapus dari simpanan' : 'Jasa disimpan');
+        draw();
+      } catch (error) {
+        toast('Gagal menyimpan', error.message, 'error');
       }
     };
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
-      send(input.value);
-    });
-    document.getElementById('chat-templates').addEventListener('click', (e) => {
-      const chip = e.target.closest('.chip');
-      if (chip) send(chip.textContent);
-    });
+  } catch (error) {
+    if (!stale()) view.innerHTML = errorBox(error.message);
   }
-
-  bindBookingActions(document.getElementById('bd-actions'));
-  refreshBookingDetail(booking);
 }
 
-function refreshBookingDetail(booking) {
-  const $actions = document.getElementById('bd-actions');
-  if (!$actions) return;
-  const role = state.user.role;
-  $actions.innerHTML = `<span class="badge badge-${booking.status}">${esc(booking.statusLabel)}</span>${bookingActions(booking, { detail: true })}`;
+function folioCard(item, index) {
+  return `<button class="card folio" type="button" data-folio="${index}"><img src="${esc(item.image)}" alt="" /><figcaption><strong>${esc(item.title)}</strong><span class="small muted">${esc(item.category)} · ${formatDate(item.date)}</span></figcaption></button>`;
+}
 
-  const closed = ['REJECTED', 'EXPIRED', 'CANCELLED'].includes(booking.status);
-  const currentIdx = LIFECYCLE.findIndex((s) => s.status === booking.status);
-  document.getElementById('bd-timeline').innerHTML = closed
-    ? `<div class="timeline-step current"><span class="dot"></span><div><strong>${esc(booking.statusLabel)}</strong><span class="small">${
-        booking.status === 'EXPIRED'
-          ? 'Penyedia tidak merespons dalam 2 menit. Tanggal ini kembali tersedia.'
-          : booking.status === 'REJECTED'
-            ? 'Penyedia menolak pesanan. Silakan pilih penyedia atau tanggal lain.'
-            : 'Pesanan dibatalkan.'
-      }</span></div></div>`
-    : LIFECYCLE.map(
-        (s, i) => `
-        <div class="timeline-step ${i < currentIdx || booking.status === 'SELESAI' ? 'done' : i === currentIdx ? 'current' : ''}">
-          <span class="dot"></span>
-          <div><strong>${s.label}</strong><span class="small">${i === 0 && booking.status === 'PENDING' ? countdownHtml(booking) : s.hint}</span></div>
-        </div>`,
-      ).join('');
-
-  const $meta = document.getElementById('bd-track-meta');
-  const canShare = role !== 'admin' && TRACKABLE.has(booking.status);
-  const sharing = state.geoBookingId === booking.id;
-  if (!canShare && sharing) stopSharingLocation();
-  $meta.innerHTML = `
-    <span class="row small muted" style="gap:14px">
-      <span><span class="pin pin-provider" style="display:inline-block;width:12px;height:12px;border-width:2px"></span> Penyedia</span>
-      <span><span class="pin pin-customer" style="display:inline-block;width:12px;height:12px;border-width:2px"></span> Customer</span>
-      <span><span class="pin pin-destination" style="display:inline-block;width:12px;height:12px;border-width:2px"></span> Tujuan</span>
-    </span>
-    <span class="spacer"></span>
-    ${
-      canShare
-        ? `<button class="btn btn-sm ${sharing ? 'btn-danger' : 'btn-primary'}" id="share-location">${icon('locate', 16)} ${sharing ? 'Hentikan berbagi lokasi' : 'Bagikan lokasi live'}</button>`
-        : `<span class="small muted">${TRACKABLE.has(booking.status) ? 'Live tracking aktif' : 'Live tracking aktif setelah pesanan diterima'}</span>`
-    }`;
-  document.getElementById('share-location')?.addEventListener('click', () => {
-    if (state.geoBookingId === booking.id) stopSharingLocation();
-    else startSharingLocation(booking.id);
-    refreshBookingDetail(state.bookings.find((b) => b.id === booking.id) || booking);
+function bindFolio(view, items) {
+  view.querySelectorAll('[data-folio]').forEach((button) => {
+    button.onclick = () => lightbox(items, Number(button.dataset.folio));
   });
+}
 
-  const $rating = document.getElementById('bd-rating');
-  if (booking.status === 'SELESAI' && (booking.rated || role === 'customer')) {
-    $rating.hidden = false;
-    if (booking.rated) {
-      $rating.innerHTML = `<div class="rating"><strong>Rating diberikan</strong><div class="stars">${starIcon(20).repeat(booking.rating?.stars || 0)}</div>${
-        booking.rating?.comment ? `<p class="muted">“${esc(booking.rating.comment)}”</p>` : ''
-      }</div>`;
-    } else {
-      let stars = 0;
-      $rating.innerHTML = `
-        <form class="rating" id="rating-form">
-          <strong>Bagaimana layanan ${esc(booking.provider?.name)}?</strong>
-          <div class="star-input" role="radiogroup" aria-label="Rating">${[1, 2, 3, 4, 5].map((n) => `<button type="button" data-star="${n}" aria-label="${n} bintang">${starIcon(28)}</button>`).join('')}</div>
-          <textarea class="input" name="comment" maxlength="500" placeholder="Ceritakan pengalamanmu (opsional)"></textarea>
-          <p class="form-error" id="rating-error"></p>
-          <button class="btn btn-accent" type="submit">Kirim rating</button>
+function reviewCard(review) {
+  return `<article class="card review"><span class="avatar">${esc(initials(review.customerName))}</span><div><strong>${esc(review.customerName)}</strong> ${starRow(review.rating, null)}<p>${esc(review.text)}</p><p class="small muted">${esc(review.serviceName)} · Pesanan ${esc(review.bookingId)} · ${formatDate(review.createdAt)}</p></div></article>`;
+}
+
+async function pageProvider(view, route, stale) {
+  view.innerHTML = skeletonCards(2);
+  try {
+    const data = await api(`/api/providers/${route.parts[1]}`);
+    if (stale()) return;
+    const provider = data.provider;
+    view.innerHTML = `
+      <article class="card pad" style="margin-bottom:16px">
+        <div class="row"><span class="avatar">${esc(initials(provider.businessName))}</span><div><p class="small muted">${esc(provider.categoryName)} · ${esc(provider.city)}</p><h1 class="display" style="font-size:2rem">${esc(provider.businessName)}</h1><p class="small">${esc(provider.name)} ${provider.verified ? '· Terverifikasi' : ''}</p></div></div>
+        <p>${esc(provider.description)}</p>
+        <p class="small muted">${esc(provider.location)} · ${starRow(provider.rating, provider.reviewCount)}</p>
+      </article>
+      <h2>Portofolio</h2>
+      <div class="folio-grid" style="margin:12px 0 22px">${data.portfolio.length ? data.portfolio.map(folioCard).join('') : '<p class="muted">Belum ada portofolio.</p>'}</div>
+      <h2>Jasa</h2>
+      <div class="card-grid" style="margin-top:12px">${data.services.map(serviceCard).join('') || '<p class="muted">Belum ada jasa aktif.</p>'}</div>`;
+    bindFolio(view, data.portfolio);
+  } catch (error) {
+    if (!stale()) view.innerHTML = errorBox(error.message);
+  }
+}
+
+async function pageCompare(view, _route, stale) {
+  if (!state.compare.length) {
+    view.innerHTML = emptyState({ title: 'Belum ada jasa untuk dibandingkan', text: 'Buka detail jasa lalu pilih Bandingkan. Maksimal 3 jasa.', action: '<a class="btn btn-primary" href="#/jelajah">Jelajahi jasa</a>' });
+    return;
+  }
+  view.innerHTML = skeletonCards(1);
+  try {
+    const items = await Promise.all(state.compare.map((id) => api(`/api/services/${id}`).catch(() => null)));
+    if (stale()) return;
+    const services = items.filter(Boolean).map((item) => item.service);
+    view.innerHTML = `
+      <div class="section-head"><div><h1 class="display" style="font-size:2.2rem">Bandingkan jasa</h1><p class="muted">Harga, rating, dan lokasi berdampingan.</p></div></div>
+      <div class="card table-wrap"><table class="compare-table"><tbody>
+        <tr><th>Jasa</th>${services.map((service) => `<td><a href="#/jasa/${service.id}"><strong>${esc(service.name)}</strong></a><br><span class="small muted">${esc(service.providerName)}</span></td>`).join('')}</tr>
+        <tr><th>Kategori</th>${services.map((service) => `<td>${esc(service.categoryName)}</td>`).join('')}</tr>
+        <tr><th>Lokasi</th>${services.map((service) => `<td>${esc(service.city)}</td>`).join('')}</tr>
+        <tr><th>Harga mulai</th>${services.map((service) => `<td class="price">${rupiah(service.price)}</td>`).join('')}</tr>
+        <tr><th>Rating</th>${services.map((service) => `<td>${service.rating ? service.rating.toFixed(1) : 'Baru'} (${service.reviewCount})</td>`).join('')}</tr>
+        <tr><th>Paket</th>${services.map((service) => `<td>${service.packages.map((pkg) => `${esc(pkg.name)} · ${rupiah(pkg.price)}`).join('<br>')}</td>`).join('')}</tr>
+        <tr><th></th>${services.map((service) => `<td><a class="btn btn-sm btn-primary" href="${bookHref(service.id)}">Pesan</a> <button class="btn btn-sm" data-remove="${service.id}" type="button">Hapus</button></td>`).join('')}</tr>
+      </tbody></table></div>`;
+    view.querySelectorAll('[data-remove]').forEach((button) => {
+      button.onclick = () => {
+        toggleCompare(button.dataset.remove);
+        draw();
+      };
+    });
+  } catch (error) {
+    if (!stale()) view.innerHTML = errorBox(error.message);
+  }
+}
+
+function todayJakarta() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta' }).format(new Date());
+}
+
+async function pageBook(view, route, stale) {
+  view.innerHTML = skeletonCards(1);
+  try {
+    const data = await api(`/api/services/${route.parts[1]}`);
+    if (stale()) return;
+    const service = data.service;
+    if (!service.available) {
+      view.innerHTML = emptyState({ title: 'Jasa ini sedang tidak menerima pesanan', text: service.name, action: `<a class="btn" href="#/jasa/${service.id}">Kembali ke detail</a>` });
+      return;
+    }
+    let month = new Date();
+    let selectedDate = '';
+    let selectedTime = '';
+    let packageId = service.packages.find((pkg) => pkg.id === route.params.paket)?.id || service.packages[0].id;
+    const taken = new Set(data.takenSlots.map((slot) => `${slot.date}|${slot.time}`));
+    const drawForm = () => {
+      const pkg = service.packages.find((item) => item.id === packageId);
+      const fee = Math.round((pkg.price * state.settings.platformFeePercent) / 100);
+      view.innerHTML = `
+        <div class="section-head"><div><h1 class="display" style="font-size:2.2rem">Pesan jasa</h1><p class="muted">${esc(service.name)} · ${esc(service.providerName)}</p></div></div>
+        <div class="layout">
+          <form class="stack" id="book-form">
+            <section class="card pad"><h2>1. Paket</h2><div class="packages" id="pkgs">${service.packages
+              .map(
+                (item) => `<button type="button" class="package ${item.id === packageId ? 'selected' : ''}" data-pkg="${item.id}"><strong>${esc(item.name)}</strong><span class="small muted">${esc(item.description)}</span><span class="price">${rupiah(item.price)}</span></button>`,
+              )
+              .join('')}</div></section>
+            <section class="card pad"><h2>2. Tanggal</h2><div id="cal"></div></section>
+            <section class="card pad"><h2>3. Jam</h2><div class="times" id="times">${TIMES.map((time) => `<button type="button" class="time ${time === selectedTime ? 'selected' : ''}" data-time="${time}" ${selectedDate && taken.has(`${selectedDate}|${time}`) ? 'disabled' : ''}>${time}</button>`).join('')}</div></section>
+            <section class="card pad"><h2>4. Lokasi layanan</h2><label class="field">Alamat lengkap<textarea class="input" name="location" required minlength="5" placeholder="Nama gedung, jalan, dan patokan"></textarea></label><label class="field">Catatan tambahan<textarea class="input" name="notes" maxlength="500" placeholder="Contoh: tamu datang pukul 10, mohon datang lebih awal."></textarea></label></section>
+            <p class="form-error" id="book-error"></p>
+            <button class="btn btn-primary" type="submit">Konfirmasi pesanan</button>
+          </form>
+          <aside class="card summary">
+            <h2>Ringkasan</h2>
+            <div><span>Jasa</span><strong>${esc(service.name)}</strong></div>
+            <div><span>Penyedia</span><span>${esc(service.providerName)}</span></div>
+            <div><span>Paket</span><span>${esc(pkg.name)}</span></div>
+            <div><span>Tanggal</span><span>${selectedDate ? formatLongDate(selectedDate) : '—'}</span></div>
+            <div><span>Jam</span><span>${selectedTime || '—'}</span></div>
+            <div class="line"><span>Harga</span><span>${rupiah(pkg.price)}</span></div>
+            <div class="line"><span>Biaya platform ${state.settings.platformFeePercent}%</span><span>${rupiah(fee)}</span></div>
+            <div class="line total"><span>Total</span><span>${rupiah(pkg.price + fee)}</span></div>
+          </aside>
+        </div>`;
+      renderCalendar();
+      document.getElementById('pkgs').onclick = (event) => {
+        const button = event.target.closest('[data-pkg]');
+        if (!button) return;
+        packageId = button.dataset.pkg;
+        const locationValue = view.querySelector('[name=location]').value;
+        const notes = view.querySelector('[name=notes]').value;
+        drawForm();
+        view.querySelector('[name=location]').value = locationValue;
+        view.querySelector('[name=notes]').value = notes;
+      };
+      document.getElementById('times').onclick = (event) => {
+        const button = event.target.closest('[data-time]');
+        if (!button || button.disabled) return;
+        selectedTime = button.dataset.time;
+        view.querySelectorAll('[data-time]').forEach((node) => node.classList.toggle('selected', node === button));
+        drawSummaryOnly();
+      };
+      document.getElementById('book-form').onsubmit = submitBooking;
+    };
+    const drawSummaryOnly = () => {
+      const pkg = service.packages.find((item) => item.id === packageId);
+      const fee = Math.round((pkg.price * state.settings.platformFeePercent) / 100);
+      const box = view.querySelector('.summary');
+      if (!box) return;
+      box.innerHTML = `<h2>Ringkasan</h2>
+        <div><span>Jasa</span><strong>${esc(service.name)}</strong></div>
+        <div><span>Penyedia</span><span>${esc(service.providerName)}</span></div>
+        <div><span>Paket</span><span>${esc(pkg.name)}</span></div>
+        <div><span>Tanggal</span><span>${selectedDate ? formatLongDate(selectedDate) : '—'}</span></div>
+        <div><span>Jam</span><span>${selectedTime || '—'}</span></div>
+        <div class="line"><span>Harga</span><span>${rupiah(pkg.price)}</span></div>
+        <div class="line"><span>Biaya platform ${state.settings.platformFeePercent}%</span><span>${rupiah(fee)}</span></div>
+        <div class="line total"><span>Total</span><span>${rupiah(pkg.price + fee)}</span></div>`;
+    };
+    const renderCalendar = () => {
+      const year = month.getFullYear();
+      const mon = month.getMonth();
+      const offset = (new Date(year, mon, 1).getDay() + 6) % 7;
+      const count = new Date(year, mon + 1, 0).getDate();
+      const today = todayJakarta();
+      let days = '<span class="dow">Sen</span><span class="dow">Sel</span><span class="dow">Rab</span><span class="dow">Kam</span><span class="dow">Jum</span><span class="dow">Sab</span><span class="dow">Min</span>';
+      days += '<span></span>'.repeat(offset);
+      for (let day = 1; day <= count; day += 1) {
+        const iso = `${year}-${String(mon + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const past = iso < today;
+        days += `<button type="button" class="day ${iso === selectedDate ? 'selected' : ''}" data-date="${iso}" ${past ? 'disabled' : ''}>${day}</button>`;
+      }
+      document.getElementById('cal').innerHTML = `<div class="calendar"><div class="row"><button type="button" class="btn btn-sm" id="prev-month">‹</button><strong>${month.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</strong><button type="button" class="btn btn-sm" id="next-month">›</button></div><div class="cal-grid">${days}</div></div>`;
+      document.getElementById('prev-month').onclick = () => {
+        month = new Date(year, mon - 1, 1);
+        renderCalendar();
+      };
+      document.getElementById('next-month').onclick = () => {
+        month = new Date(year, mon + 1, 1);
+        renderCalendar();
+      };
+      document.getElementById('cal').onclick = (event) => {
+        const button = event.target.closest('[data-date]');
+        if (!button || button.disabled) return;
+        selectedDate = button.dataset.date;
+        if (taken.has(`${selectedDate}|${selectedTime}`)) selectedTime = '';
+        const locationValue = view.querySelector('[name=location]')?.value || '';
+        const notes = view.querySelector('[name=notes]')?.value || '';
+        drawForm();
+        view.querySelector('[name=location]').value = locationValue;
+        view.querySelector('[name=notes]').value = notes;
+      };
+    };
+    async function submitBooking(event) {
+      event.preventDefault();
+      const error = document.getElementById('book-error');
+      error.textContent = '';
+      if (!selectedDate || !selectedTime) {
+        error.textContent = 'Pilih tanggal dan jam terlebih dahulu.';
+        return;
+      }
+      const button = event.target.querySelector('[type=submit]');
+      button.disabled = true;
+      try {
+        const { booking } = await api('/api/bookings', {
+          method: 'POST',
+          body: { serviceId: service.id, packageId, date: selectedDate, time: selectedTime, location: event.target.location.value, notes: event.target.notes.value },
+        });
+        location.hash = `/pesanan/${booking.id}?baru=1`;
+      } catch (err) {
+        error.textContent = err.message;
+        button.disabled = false;
+      }
+    }
+    drawForm();
+  } catch (error) {
+    if (!stale()) view.innerHTML = errorBox(error.message);
+  }
+}
+
+async function pageOrder(view, route, stale) {
+  view.innerHTML = skeletonCards(1);
+  try {
+    const { booking } = await api(`/api/bookings/${route.parts[1]}`);
+    if (stale()) return;
+    const fresh = route.params.baru === '1';
+    view.innerHTML = `
+      ${fresh ? `<div class="success-banner"><strong>Pesanan berhasil</strong><span>Nomor pesanan Anda ${esc(booking.id)}. Simpan nomor ini untuk memantau status.</span></div>` : ''}
+      <article class="card pad" style="margin-top:12px">
+        <div class="row"><h1 class="display" style="font-size:2rem">${esc(booking.id)}</h1><span class="status status-${booking.status}">${STATUS_LABEL[booking.status]}</span></div>
+        <p>${esc(booking.serviceName)}</p>
+        <p class="muted">${esc(booking.providerName)} · ${esc(booking.packageName)}</p>
+        <div class="line"><span>Tanggal</span><span>${formatLongDate(booking.date)} · ${esc(booking.time)}</span></div>
+        <div class="line"><span>Lokasi</span><span>${esc(booking.location)}</span></div>
+        ${booking.notes ? `<div class="line"><span>Catatan</span><span>${esc(booking.notes)}</span></div>` : ''}
+        <div class="line"><span>Harga</span><span>${rupiah(booking.price)}</span></div>
+        <div class="line"><span>Biaya platform</span><span>${rupiah(booking.platformFee)}</span></div>
+        <div class="line total"><span>Total</span><span>${rupiah(booking.total)}</span></div>
+        <div class="row">
+          <a class="btn btn-sm" href="#/jasa/${booking.serviceId}">Lihat jasa</a>
+          ${state.user?.role === 'customer' && ['pending', 'confirmed'].includes(booking.status) ? '<button class="btn btn-sm btn-danger" id="cancel" type="button">Batalkan pesanan</button>' : ''}
+        </div>
+      </article>
+      <div id="review-box"></div>`;
+    document.getElementById('cancel')?.addEventListener('click', async () => {
+      const ok = await confirmDialog({ title: 'Batalkan pesanan?', text: 'Jadwal ini akan terbuka lagi untuk pelanggan lain.', confirm: 'Ya, batalkan', danger: true });
+      if (!ok) return;
+      try {
+        await api(`/api/bookings/${booking.id}`, { method: 'PUT', body: { status: 'cancelled' } });
+        toast('Pesanan dibatalkan');
+        draw();
+      } catch (error) {
+        toast('Gagal membatalkan', error.message, 'error');
+      }
+    });
+    if (state.user?.role === 'customer' && booking.status === 'completed' && !booking.reviewed) {
+      document.getElementById('review-box').innerHTML = `
+        <form class="card pad" id="review-form" style="margin-top:12px">
+          <h2>Beri ulasan</h2>
+          <p class="small muted">Ulasan hanya dibuka karena pesanan ini sudah selesai.</p>
+          <div class="times" id="stars">${[1, 2, 3, 4, 5].map((n) => `<button type="button" class="time" data-star="${n}">${n}</button>`).join('')}</div>
+          <label class="field">Ulasan<textarea class="input" name="text" minlength="10" required placeholder="Ceritakan pengalaman Anda, minimal 10 karakter."></textarea></label>
+          <p class="form-error" id="review-error"></p>
+          <button class="btn btn-primary" type="submit">Kirim ulasan</button>
         </form>`;
-      const form = document.getElementById('rating-form');
-      form.querySelector('.star-input').addEventListener('click', (e) => {
-        const b = e.target.closest('[data-star]');
-        if (!b) return;
-        stars = Number(b.dataset.star);
-        form.querySelectorAll('[data-star]').forEach((s) => s.classList.toggle('on', Number(s.dataset.star) <= stars));
-      });
-      form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        if (!stars) {
-          document.getElementById('rating-error').textContent = 'Pilih jumlah bintang terlebih dahulu.';
+      let rating = 0;
+      document.getElementById('stars').onclick = (event) => {
+        const button = event.target.closest('[data-star]');
+        if (!button) return;
+        rating = Number(button.dataset.star);
+        document.querySelectorAll('[data-star]').forEach((node) => node.classList.toggle('selected', Number(node.dataset.star) <= rating));
+      };
+      document.getElementById('review-form').onsubmit = async (event) => {
+        event.preventDefault();
+        if (!rating) {
+          document.getElementById('review-error').textContent = 'Pilih nilai 1 sampai 5.';
           return;
         }
         try {
-          const { booking: updated } = await api(`/api/bookings/${booking.id}/rating`, {
-            method: 'POST',
-            body: { stars, comment: form.comment.value },
-          });
-          const idx = state.bookings.findIndex((b) => b.id === updated.id);
-          if (idx >= 0) state.bookings[idx] = updated;
-          refreshBookingDetail(updated);
-          toast('Terima kasih!', 'Rating kamu membantu customer lain memilih penyedia.');
-        } catch (err) {
-          document.getElementById('rating-error').textContent = err.message;
+          await api('/api/reviews', { method: 'POST', body: { bookingId: booking.id, rating, text: event.target.text.value } });
+          toast('Ulasan terkirim', 'Terima kasih, ulasan Anda tampil di halaman jasa.');
+          location.hash = `/jasa/${booking.serviceId}`;
+        } catch (error) {
+          document.getElementById('review-error').textContent = error.message;
         }
-      });
+      };
+    } else if (booking.reviewed) {
+      document.getElementById('review-box').innerHTML = '<p class="muted" style="margin-top:12px">Anda sudah memberi ulasan untuk pesanan ini.</p>';
     }
-  } else {
-    $rating.hidden = true;
+  } catch (error) {
+    if (!stale()) view.innerHTML = errorBox(error.message);
   }
-  tickCountdowns();
 }
 
-function updateTrackingMarkers(bookingId, fit = false) {
-  if (!tracking || tracking.bookingId !== bookingId || !mapAlive(tracking.map)) return;
-  const booking = state.bookings.find((b) => b.id === bookingId);
-  if (!booking) return;
-  const points = {
-    provider: booking.providerPos,
-    customer: booking.customerPos,
-    destination: booking.destination,
-  };
-  const labels = { provider: booking.provider?.name || 'Penyedia', customer: booking.customer?.name || 'Customer', destination: 'Lokasi tujuan' };
-  const bounds = [];
-  for (const [kind, pos] of Object.entries(points)) {
-    if (!pos) continue;
-    bounds.push([pos.lat, pos.lng]);
-    if (tracking.markers[kind]) tracking.markers[kind].setLatLng([pos.lat, pos.lng]);
-    else tracking.markers[kind] = L.marker([pos.lat, pos.lng], { icon: pinIcon(kind) }).bindPopup(esc(labels[kind])).addTo(tracking.map);
-  }
-  if (fit && bounds.length > 1) tracking.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-}
-
-function startSharingLocation(bookingId) {
-  if (!navigator.geolocation) {
-    toast('Lokasi tidak didukung', 'Browser ini tidak mendukung geolokasi.', 'error');
-    return;
-  }
-  stopSharingLocation();
-  state.geoBookingId = bookingId;
-  state.geoWatch = navigator.geolocation.watchPosition(
-    (pos) => {
-      api(`/api/bookings/${bookingId}/location`, {
-        method: 'POST',
-        body: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-      }).catch((err) => {
-        toast('Gagal mengirim lokasi', err.message, 'error');
-        stopSharingLocation();
-      });
-    },
-    () => {
-      toast('Akses lokasi ditolak', 'Izinkan akses lokasi di browser agar posisi kamu tampil di peta.', 'error');
-      stopSharingLocation();
-      const booking = state.bookings.find((b) => b.id === bookingId);
-      if (booking) refreshBookingDetail(booking);
-    },
-    { enableHighAccuracy: true, maximumAge: 10000, timeout: 20000 },
-  );
-}
-
-function stopSharingLocation() {
-  if (state.geoWatch !== null) navigator.geolocation.clearWatch(state.geoWatch);
-  state.geoWatch = null;
-  state.geoBookingId = null;
-}
-
-const chatEmptyHtml = () => `<div class="empty small" data-chat-empty>${icon('chat', 32)}<p>Belum ada pesan. Gunakan pertanyaan cepat di bawah untuk memulai.</p></div>`;
-
-function chatMessageHtml(m) {
-  const mine = m.sender === state.user.role && m.sender !== 'ai' && (m.senderName ? m.senderName === state.user.name : true);
-  const from = m.sender === 'ai' ? 'AI Andallo' : m.senderName || ROLE_LABEL[m.sender] || m.sender;
-  return `<div class="msg ${mine ? 'mine' : ''} ${m.sender === 'ai' ? 'ai' : ''}" data-msg="${m.id}"><div class="from">${esc(from)}</div>${esc(m.text)}<time>${fmtTime(m.createdAt)}</time></div>`;
-}
-
-function appendChatMessage(bookingId, message) {
-  if (!tracking || tracking.bookingId !== bookingId) return;
-  const body = document.getElementById('chat-body');
-  if (!body || body.querySelector(`[data-msg="${message.id}"]`)) return;
-  body.querySelector('[data-chat-empty]')?.remove();
-  body.insertAdjacentHTML('beforeend', chatMessageHtml(message));
-  body.scrollTop = body.scrollHeight;
-}
-
-// ---------- admin ----------
-
-async function renderAdmin($view, route) {
-  const tab = route.id || 'overview';
-  if (tab === 'bookings') return renderAdminBookings($view);
-  if (tab === 'providers') return renderAdminProviders($view);
-  if (tab === 'users') return renderAdminUsers($view);
-
-  $view.innerHTML = `<div class="stats">${'<div class="skeleton" style="height:92px"></div>'.repeat(4)}</div>`;
-  let data;
-  try {
-    data = await api('/api/admin/overview');
-  } catch (err) {
-    $view.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
-    return;
-  }
-  const { stats } = data;
-  const max = Math.max(1, ...Object.values(stats.byStatus));
-  const labels = Object.fromEntries(LIFECYCLE.map((s) => [s.status, s.label]));
-  Object.assign(labels, { REJECTED: 'Ditolak', EXPIRED: 'Kedaluwarsa', CANCELLED: 'Dibatalkan' });
-  const pending = state.bookings.filter((b) => b.status === 'PENDING');
-  $view.innerHTML = `
-    <div class="page-head"><div><h1>Ringkasan</h1><p>Kondisi marketplace Andallo hari ini.</p></div></div>
-    <div class="stats">
-      <div class="card stat"><span>Total pesanan</span><strong>${stats.bookings}</strong></div>
-      <div class="card stat"><span>Penyedia terdaftar</span><strong>${stats.providers}</strong></div>
-      <div class="card stat"><span>Pengguna</span><strong>${stats.users}</strong></div>
-      <div class="card stat"><span>Nilai transaksi selesai</span><strong>${rupiah(stats.revenue)}</strong></div>
-    </div>
-    <div class="detail">
-      <section class="stack">
-        <h2 style="font-size:1.05rem">Menunggu persetujuan (${pending.length})</h2>
-        <div class="booking-list" id="admin-pending">${
-          pending.length ? pending.map(bookingItem).join('') : `<div class="card empty">${icon('check', 36)}<h3>Semua pesanan sudah direspons</h3><p>Pesanan baru akan muncul di sini secara real-time.</p></div>`
-        }</div>
-      </section>
-      <section class="card status-bars">
-        <h2 style="font-size:1.05rem">Pesanan per status</h2>
-        ${Object.entries(stats.byStatus)
-          .map(([s, n]) => `<div class="status-bar"><span>${labels[s] || s}</span><span class="track"><span style="width:${(n / max) * 100}%"></span></span><strong>${n}</strong></div>`)
-          .join('')}
-      </section>
+function pageHow(view) {
+  view.innerHTML = `
+    <h1 class="display" style="font-size:2.6rem">Cara kerja Andallo</h1>
+    <p class="lead" style="color:var(--muted);margin:10px 0 20px">Andallo menggantikan kebiasaan membandingkan jasa lewat banyak akun media sosial.</p>
+    <div class="steps">
+      <article class="card step"><em>01 · Cari</em><h3>Temukan jasa di sekitar Anda</h3><p class="muted">Gunakan kata kunci, kategori, kota, rentang harga, dan rating. Urutkan dari yang terdekat bila lokasi diizinkan.</p></article>
+      <article class="card step"><em>02 · Bandingkan</em><h3>Lihat harga yang tertulis</h3><p class="muted">Setiap jasa punya paket, portofolio, dan ulasan. Ulasan hanya berasal dari pesanan yang benar-benar selesai.</p></article>
+      <article class="card step"><em>03 · Pesan</em><h3>Kunci jadwal di Andallo</h3><p class="muted">Pilih paket, tanggal, jam, dan alamat. Anda mendapat nomor pesanan dan dapat memantau statusnya.</p></article>
     </div>`;
-  bindBookingActions(document.getElementById('admin-pending'));
 }
 
-function renderAdminBookings($view) {
-  const list = state.bookings;
-  $view.innerHTML = `
-    <div class="page-head"><div><h1>Semua Pesanan</h1><p>Terima, tolak, atau batalkan pesanan atas nama penyedia.</p></div></div>
-    <section class="card table-wrap">
-      ${
-        list.length
-          ? `<table>
-        <thead><tr><th>ID</th><th>Customer</th><th>Penyedia</th><th>Jadwal</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead>
-        <tbody>${list
-          .map(
-            (b) => `<tr>
-            <td><a href="#/booking/${b.id}">#${b.id}</a></td>
-            <td>${esc(b.customer?.name)}</td>
-            <td>${esc(b.provider?.name)}<br><span class="muted small">${esc(b.provider?.service)}</span></td>
-            <td>${fmtDate(b.date)}<br><span class="muted small">${esc(b.time)}</span></td>
-            <td>${rupiah(b.total)}</td>
-            <td><span class="badge badge-${b.status}">${esc(b.statusLabel)}</span>${b.status === 'PENDING' ? `<br><span class="countdown small" data-countdown="${esc(b.approvalExpiresAt)}">--:--</span>` : ''}</td>
-            <td><div class="actions">${bookingActions(b)}</div></td>
-          </tr>`,
-          )
-          .join('')}</tbody>
-      </table>`
-          : `<div class="empty">${icon('calendar', 40)}<h3>Belum ada pesanan</h3><p>Pesanan customer akan tampil di sini.</p></div>`
+function pageAbout(view) {
+  view.innerHTML = `
+    <div class="layout">
+      <article class="stack">
+        <p class="kicker">Tentang Andallo</p>
+        <h1 class="display" style="font-size:2.8rem">Satu tempat untuk memilih jasa dengan lebih tenang.</h1>
+        <p>Mencari fotografer, perias, katering, atau teknisi sering berarti membuka banyak percakapan yang berbeda. Portofolio ada di satu tempat, harga di tempat lain, dan ulasan sulit dilacak.</p>
+        <p>Andallo mengumpulkan penyedia yang dikelola admin, harga paket yang tertulis, dan ulasan dari pelanggan yang sudah menyelesaikan pesanan. Anda bisa membandingkan, menyimpan, lalu memesan tanpa meninggalkan situs.</p>
+      </article>
+      <aside class="card pad">
+        <h2>Yang bisa Anda lakukan</h2>
+        <p>Mencari jasa di Tangerang, Jakarta, Bekasi, Bandung, dan Depok.</p>
+        <p>Membandingkan hingga tiga jasa sekaligus.</p>
+        <p>Menyimpan jasa dan memantau pesanan dari akun Anda.</p>
+        <a class="btn btn-primary" href="#/daftar" style="margin-top:8px">Daftar Sekarang</a>
+      </aside>
+    </div>`;
+}
+
+function authShell(title, text, body) {
+  return `<form class="card auth-wrap" id="auth-form"><a class="brand" href="#/">${logo()}</a><h1 class="display" style="font-size:2rem">${title}</h1><p class="muted">${text}</p>${body}<p class="form-error" id="auth-error"></p></form>`;
+}
+
+function pageLogin(view, route) {
+  view.innerHTML = authShell('Masuk', 'Gunakan akun pelanggan atau admin.', `
+    <label class="field">Email<input class="input" name="email" type="email" required autocomplete="username" /></label>
+    <label class="field">Kata sandi<input class="input" name="password" type="password" required autocomplete="current-password" /></label>
+    <button class="btn btn-primary" type="submit">Masuk</button>
+    <p class="small"><a href="#/lupa-sandi">Lupa kata sandi?</a> · <a href="#/daftar">Daftar</a></p>
+    <div class="demo"><p class="small muted">Akun demo · kata sandi Demo1234</p>
+      <button class="btn" type="button" data-demo="rieke@andallo.com">Pelanggan · rieke@andallo.com</button>
+      <button class="btn" type="button" data-demo="admin@andallo.com">Admin · admin@andallo.com</button>
+    </div>`);
+  const form = document.getElementById('auth-form');
+  const submit = async (email, password) => {
+    document.getElementById('auth-error').textContent = '';
+    try {
+      const data = await api('/api/auth/login', { method: 'POST', body: { email, password } });
+      setSession(data.token, data.user);
+      const next = route.params.lanjut;
+      location.hash = next && next.startsWith('/') ? next : data.user.role === 'admin' ? '/admin' : '/akun';
+    } catch (error) {
+      document.getElementById('auth-error').textContent = error.message;
+    }
+  };
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    submit(form.email.value.trim(), form.password.value);
+  };
+  form.querySelectorAll('[data-demo]').forEach((button) => {
+    button.onclick = () => submit(button.dataset.demo, 'Demo1234');
+  });
+}
+
+function pageRegister(view, route) {
+  view.innerHTML = authShell('Daftar', 'Buat akun pelanggan. Penyedia jasa didaftarkan oleh admin.', `
+    <label class="field">Nama lengkap<input class="input" name="name" required minlength="3" autocomplete="name" /></label>
+    <label class="field">Email<input class="input" name="email" type="email" required autocomplete="email" /></label>
+    <label class="field">Nomor telepon<input class="input" name="phone" required placeholder="08xxxxxxxxxx" /></label>
+    <label class="field">Kata sandi<input class="input" name="password" type="password" required minlength="8" autocomplete="new-password" /></label>
+    <label class="field">Ulangi kata sandi<input class="input" name="confirmPassword" type="password" required minlength="8" /></label>
+    <button class="btn btn-primary" type="submit">Daftar</button>
+    <p class="small">Sudah punya akun? <a href="#/masuk">Masuk</a></p>`);
+  document.getElementById('auth-form').onsubmit = async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const error = document.getElementById('auth-error');
+    error.textContent = '';
+    if (form.password.value !== form.confirmPassword.value) {
+      error.textContent = 'Konfirmasi kata sandi tidak sama.';
+      return;
+    }
+    try {
+      const data = await api('/api/auth/register', {
+        method: 'POST',
+        body: { name: form.name.value, email: form.email.value, phone: form.phone.value, password: form.password.value, confirmPassword: form.confirmPassword.value },
+      });
+      setSession(data.token, data.user);
+      toast('Akun dibuat', 'Selamat datang di Andallo.');
+      location.hash = route.params.lanjut?.startsWith('/') ? route.params.lanjut : '/akun';
+    } catch (err) {
+      error.textContent = err.message;
+    }
+  };
+}
+
+function pageForgot(view) {
+  view.innerHTML = authShell('Lupa kata sandi', 'Kami buatkan tautan untuk mengatur ulang kata sandi.', `
+    <label class="field">Email<input class="input" name="email" type="email" required /></label>
+    <button class="btn btn-primary" type="submit">Buat tautan</button>
+    <div id="reset-result"></div>`);
+  document.getElementById('auth-form').onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      const data = await api('/api/auth/forgot', { method: 'POST', body: { email: event.target.email.value } });
+      document.getElementById('reset-result').innerHTML = `<p>${esc(data.message)}</p>${data.demoResetPath ? `<p class="small">Mode demo, email belum terhubung. <a href="${esc(data.demoResetPath)}">Buka tautan reset</a></p>` : ''}`;
+    } catch (error) {
+      document.getElementById('auth-error').textContent = error.message;
+    }
+  };
+}
+
+function pageReset(view, route) {
+  view.innerHTML = authShell('Atur kata sandi baru', 'Gunakan minimal 8 karakter, dengan huruf dan angka.', `
+    <label class="field">Kata sandi baru<input class="input" name="password" type="password" required minlength="8" /></label>
+    <button class="btn btn-primary" type="submit">Simpan kata sandi</button>`);
+  document.getElementById('auth-form').onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      const data = await api('/api/auth/reset', { method: 'POST', body: { token: route.params.token || '', password: event.target.password.value } });
+      toast('Berhasil', data.message);
+      location.hash = '/masuk';
+    } catch (error) {
+      document.getElementById('auth-error').textContent = error.message;
+    }
+  };
+}
+
+async function pageAccount(view, route, stale) {
+  const tab = route.parts[1] || 'ringkasan';
+  const tabs = [
+    ['', 'Ringkasan'],
+    ['pesanan', 'Pesanan saya'],
+    ['simpanan', 'Tersimpan'],
+    ['ulasan', 'Ulasan'],
+    ['profil', 'Profil'],
+    ['pengaturan', 'Pengaturan'],
+  ];
+  const tabActive = (href) => (href === '' ? tab === 'ringkasan' : tab === href);
+  view.innerHTML = `<div class="tabs">${tabs.map(([href, label]) => `<a class="tab ${tabActive(href) ? 'active' : ''}" href="#/akun${href ? `/${href}` : ''}">${label}</a>`).join('')}</div><div id="account-body">${skeletonCards(2)}</div>`;
+  const body = document.getElementById('account-body');
+  try {
+    if (tab === 'profil') return accountProfile(body);
+    if (tab === 'pengaturan') return accountSettings(body);
+    if (tab === 'simpanan') return accountSaved(body, stale);
+    if (tab === 'ulasan') return accountReviews(body, stale);
+    const { bookings } = await api('/api/bookings');
+    if (stale()) return;
+    if (tab === 'pesanan') {
+      const filter = route.params.status || 'all';
+      const today = todayJakarta();
+      const match = {
+        all: () => true,
+        upcoming: (item) => ['pending', 'confirmed'].includes(item.status) && item.date >= today,
+        completed: (item) => item.status === 'completed',
+        cancelled: (item) => item.status === 'cancelled',
+      };
+      body.innerHTML = `
+        <div class="chips" style="margin-bottom:12px">
+          ${[
+            ['all', 'Semua'],
+            ['upcoming', 'Akan datang'],
+            ['completed', 'Selesai'],
+            ['cancelled', 'Dibatalkan'],
+          ].map(([id, label]) => `<a class="chip ${filter === id ? 'active' : ''}" href="#/akun/pesanan?status=${id}">${label}</a>`).join('')}
+        </div>
+        <div class="list">${bookings.filter(match[filter] || match.all).map(bookingRow).join('') || emptyState({ title: 'Belum ada pesanan di sini', text: 'Pesanan yang Anda buat akan muncul di daftar ini.', action: '<a class="btn btn-primary" href="#/jelajah">Cari jasa</a>' })}</div>`;
+      return;
+    }
+    const today = todayJakarta();
+    const upcoming = bookings.filter((item) => ['pending', 'confirmed'].includes(item.status) && item.date >= today);
+    body.innerHTML = `
+      <div class="stats">
+        <div class="card stat"><span>Total pesanan</span><strong>${bookings.length}</strong></div>
+        <div class="card stat"><span>Akan datang</span><strong>${upcoming.length}</strong></div>
+        <div class="card stat"><span>Selesai</span><strong>${bookings.filter((item) => item.status === 'completed').length}</strong></div>
+        <div class="card stat"><span>Dibatalkan</span><strong>${bookings.filter((item) => item.status === 'cancelled').length}</strong></div>
+      </div>
+      <h2 style="margin:18px 0 10px">Pesanan terdekat</h2>
+      <div class="list">${upcoming.slice(0, 3).map(bookingRow).join('') || emptyState({ title: 'Tidak ada jadwal dekat', text: 'Kalau Anda memesan jasa, jadwalnya tampil di sini.' })}</div>`;
+  } catch (error) {
+    if (!stale()) body.innerHTML = errorBox(error.message);
+  }
+}
+
+function bookingRow(booking) {
+  return `<article class="card booking-row"><img src="${esc(booking.serviceImage)}" alt="" /><div><div class="row"><strong>${esc(booking.serviceName)}</strong><span class="status status-${booking.status}">${STATUS_LABEL[booking.status]}</span></div><p class="small muted">${esc(booking.id)} · ${esc(booking.providerName)} · ${formatDate(booking.date)} ${esc(booking.time)}</p><p class="price">${rupiah(booking.total)}</p></div><a class="btn btn-sm actions" href="#/pesanan/${booking.id}">Detail</a></article>`;
+}
+
+async function accountSaved(body, stale) {
+  const { services } = await api('/api/saved');
+  if (stale()) return;
+  body.innerHTML = services.length ? `<div class="card-grid">${services.map(serviceCard).join('')}</div>` : emptyState({ title: 'Belum ada jasa tersimpan', text: 'Buka detail jasa dan pilih Simpan.', action: '<a class="btn btn-primary" href="#/jelajah">Jelajahi jasa</a>' });
+}
+
+async function accountReviews(body, stale) {
+  const { reviews } = await api('/api/reviews?mine=1');
+  if (stale()) return;
+  body.innerHTML = reviews.length ? `<div class="reviews">${reviews.map(reviewCard).join('')}</div>` : emptyState({ title: 'Anda belum menulis ulasan', text: 'Ulasan bisa dikirim setelah pesanan berstatus selesai.' });
+}
+
+function accountProfile(body) {
+  const user = state.user;
+  body.innerHTML = `
+    <div class="layout">
+      <form class="card pad" id="profile-form">
+        <h2>Profil</h2>
+        <label class="field">Nama<input class="input" name="name" value="${esc(user.name)}" required minlength="3" /></label>
+        <label class="field">Email<input class="input" value="${esc(user.email)}" disabled /></label>
+        <label class="field">Telepon<input class="input" name="phone" value="${esc(user.phone)}" required /></label>
+        <p class="form-error" id="profile-error"></p>
+        <button class="btn btn-primary" type="submit">Simpan profil</button>
+      </form>
+      <aside class="card pad">
+        <h2>Akun</h2>
+        <p class="muted">Kata sandi diubah dari menu Pengaturan.</p>
+        <a class="btn" href="#/akun/pengaturan">Buka pengaturan</a>
+      </aside>
+    </div>`;
+  document.getElementById('profile-form').onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      const data = await api('/api/me', { method: 'PUT', body: { name: event.target.name.value, phone: event.target.phone.value } });
+      state.user = data.user;
+      toast('Profil diperbarui');
+    } catch (error) {
+      document.getElementById('profile-error').textContent = error.message;
+    }
+  };
+}
+
+function accountSettings(body) {
+  body.innerHTML = `
+    <form class="card pad form-grid" id="password-form" style="max-width:520px">
+      <h2>Kata sandi</h2>
+      <p class="small muted">Minimal 8 karakter, berisi huruf dan angka.</p>
+      <label class="field">Kata sandi saat ini<input class="input" name="currentPassword" type="password" required autocomplete="current-password" /></label>
+      <label class="field">Kata sandi baru<input class="input" name="password" type="password" required minlength="8" autocomplete="new-password" /></label>
+      <p class="form-error" id="password-error"></p>
+      <button class="btn btn-primary" type="submit">Perbarui kata sandi</button>
+    </form>`;
+  document.getElementById('password-form').onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      await api('/api/me/password', { method: 'PUT', body: { currentPassword: event.target.currentPassword.value, password: event.target.password.value } });
+      event.target.reset();
+      toast('Kata sandi diperbarui');
+    } catch (error) {
+      document.getElementById('password-error').textContent = error.message;
+    }
+  };
+}
+
+async function pageAdmin(view, route, stale) {
+  const section = route.parts[1] || 'ringkasan';
+  try {
+    if (section === 'penyedia') return adminProviders(view, route, stale);
+    if (section === 'jasa') return adminServices(view, route, stale);
+    if (section === 'kategori') return adminCategories(view, stale);
+    if (section === 'pesanan') return adminBookings(view, stale);
+    if (section === 'ulasan') return adminReviews(view, stale);
+    if (section === 'pelanggan') return adminCustomers(view, stale);
+    if (section === 'pengaturan') return adminSettings(view, stale);
+    const [{ stats }, { bookings }] = await Promise.all([api('/api/admin/stats'), api('/api/bookings')]);
+    if (stale()) return;
+    const max = Math.max(1, ...Object.values(stats.byStatus));
+    view.innerHTML = `
+      <h1 class="display" style="font-size:2.2rem;margin-bottom:14px">Ringkasan</h1>
+      <div class="stats">
+        ${[
+          ['Pelanggan', stats.customers],
+          ['Penyedia', stats.providers],
+          ['Jasa', stats.services],
+          ['Pesanan', stats.bookings],
+          ['Selesai', stats.completed],
+          ['Dibatalkan', stats.cancelled],
+          ['Pendapatan', rupiah(stats.revenue)],
+        ].map(([label, value]) => `<div class="card stat"><span>${label}</span><strong>${value}</strong></div>`).join('')}
+      </div>
+      <div class="layout" style="margin-top:16px">
+        <section class="card bars"><h2>Pesanan per status</h2>${Object.entries(stats.byStatus)
+          .map(([status, count]) => `<div class="bar"><span>${STATUS_LABEL[status]}</span><span class="track"><span style="width:${(count / max) * 100}%"></span></span><strong>${count}</strong></div>`)
+          .join('')}</section>
+        <section class="stack"><h2>Pesanan terbaru</h2>${bookings.slice(0, 5).map((booking) => `<a class="card pad" href="#/admin/pesanan"><strong>${esc(booking.id)}</strong><br><span class="small">${esc(booking.customerName)} · ${esc(booking.serviceName)}</span></a>`).join('')}</section>
+      </div>`;
+  } catch (error) {
+    if (!stale()) view.innerHTML = errorBox(error.message);
+  }
+}
+
+async function adminProviders(view, route, stale) {
+  const id = route.parts[2];
+  if (id) return providerEditor(view, id === 'baru' ? null : id, stale);
+  const { providers } = await api('/api/providers?kelola=1');
+  if (stale()) return;
+  view.innerHTML = `
+    <div class="section-head"><h1 class="display" style="font-size:2rem">Penyedia jasa</h1><a class="btn btn-primary" href="#/admin/penyedia/baru">Tambah penyedia</a></div>
+    <div class="card table-wrap"><table><thead><tr><th>Usaha</th><th>Kota</th><th>Kategori</th><th>Status</th><th></th></tr></thead><tbody>
+      ${providers
+        .map(
+          (provider) => `<tr><td><strong>${esc(provider.businessName)}</strong><br><span class="small muted">${esc(provider.name)}</span></td><td>${esc(provider.city)}</td><td>${esc(provider.categoryName)}</td><td>${provider.active ? 'Aktif' : 'Nonaktif'} ${provider.verified ? '· Terverifikasi' : ''}</td><td class="row"><a class="btn btn-sm" href="#/admin/penyedia/${provider.id}">Ubah</a><button class="btn btn-sm" data-toggle="${provider.id}" type="button">${provider.active ? 'Nonaktifkan' : 'Aktifkan'}</button><button class="btn btn-sm btn-danger" data-del="${provider.id}" type="button">Hapus</button></td></tr>`,
+        )
+        .join('')}
+    </tbody></table></div>`;
+  view.onclick = async (event) => {
+    const toggle = event.target.closest('[data-toggle]');
+    const del = event.target.closest('[data-del]');
+    if (toggle) {
+      const provider = providers.find((item) => item.id === toggle.dataset.toggle);
+      await api(`/api/providers/${provider.id}`, { method: 'PUT', body: { active: !provider.active } });
+      toast(provider.active ? 'Penyedia dinonaktifkan' : 'Penyedia diaktifkan');
+      draw();
+    }
+    if (del) {
+      const ok = await confirmDialog({ title: 'Hapus penyedia?', text: 'Jasa yang terhubung ikut terhapus. Pesanan aktif akan menolak penghapusan.', confirm: 'Hapus', danger: true });
+      if (!ok) return;
+      try {
+        await api(`/api/providers/${del.dataset.del}`, { method: 'DELETE' });
+        toast('Penyedia dihapus');
+        draw();
+      } catch (error) {
+        toast('Tidak bisa dihapus', error.message, 'error');
       }
-    </section>`;
-  bindBookingActions($view);
-  tickCountdowns();
+    }
+  };
 }
 
-async function renderAdminProviders($view) {
-  $view.innerHTML = `<div class="skeleton" style="height:400px"></div>`;
-  try {
-    const { providers } = await api('/api/providers?sort=rating');
-    $view.innerHTML = `
-      <div class="page-head"><div><h1>Penyedia</h1><p>${providers.length} penyedia terverifikasi di Andallo.</p></div></div>
-      <section class="card table-wrap"><table>
-        <thead><tr><th>Nama</th><th>Kategori</th><th>Layanan</th><th>Kota</th><th>Harga</th><th>Rating</th><th></th></tr></thead>
-        <tbody>${providers
-          .map(
-            (p) => `<tr><td><strong>${esc(p.name)}</strong></td><td>${esc(p.category)}</td><td>${esc(p.service)}</td><td>${esc(p.city)}</td><td>${rupiah(p.price)}</td><td><span class="stars">${starIcon()} <span>${p.rating.toFixed(1)}</span></span> <span class="muted small">(${p.reviews})</span></td><td><a class="btn btn-sm" href="#/provider/${p.id}">Lihat</a></td></tr>`,
-          )
-          .join('')}</tbody>
-      </table></section>`;
-  } catch (err) {
-    $view.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
-  }
-}
-
-async function renderAdminUsers($view) {
-  $view.innerHTML = `<div class="skeleton" style="height:300px"></div>`;
-  try {
-    const { users } = await api('/api/admin/overview');
-    $view.innerHTML = `
-      <div class="page-head"><div><h1>Pengguna</h1><p>Akun yang dapat masuk ke Andallo.</p></div></div>
-      <section class="card table-wrap"><table>
-        <thead><tr><th>Nama</th><th>Email</th><th>Peran</th><th>WhatsApp</th></tr></thead>
-        <tbody>${users
-          .map(
-            (u) => `<tr><td><div class="row"><span class="avatar" style="width:30px;height:30px;font-size:.72rem">${initials(u.name)}</span>${esc(u.name)}</div></td><td>${esc(u.email)}</td><td>${ROLE_LABEL[u.role] || esc(u.role)}</td><td>${esc(u.phone || '—')}</td></tr>`,
-          )
-          .join('')}</tbody>
-      </table></section>`;
-  } catch (err) {
-    $view.innerHTML = `<div class="error-box">${esc(err.message)}</div>`;
-  }
-}
-
-// ---------- countdown ticker ----------
-
-function tickCountdowns() {
-  const now = Date.now();
-  document.querySelectorAll('[data-countdown]').forEach((el) => {
-    const left = Math.max(0, Date.parse(el.dataset.countdown) - now);
-    const s = Math.ceil(left / 1000);
-    el.textContent = left ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : 'Waktu habis';
+async function providerEditor(view, id, stale) {
+  const existing = id ? (await api(`/api/providers/${id}?kelola=1`)).provider : null;
+  if (stale()) return;
+  const value = existing || { name: '', businessName: '', image: '', description: '', phone: '', email: '', city: 'Jakarta', location: '', categoryId: state.categories[0]?.id, verified: false, active: true };
+  view.innerHTML = `
+    <h1 class="display" style="font-size:2rem;margin-bottom:12px">${existing ? 'Ubah penyedia' : 'Penyedia baru'}</h1>
+    <form class="card pad form-grid" id="provider-form">
+      <div class="two"><label class="field">Nama penanggung jawab<input class="input" name="name" required value="${esc(value.name)}" /></label><label class="field">Nama usaha<input class="input" name="businessName" required value="${esc(value.businessName)}" /></label></div>
+      <label class="field">Foto profil (tautan https)<input class="input" name="image" required value="${esc(value.image)}" /></label>
+      <label class="field">Deskripsi<textarea class="input" name="description" required minlength="20">${esc(value.description)}</textarea></label>
+      <div class="two"><label class="field">Telepon<input class="input" name="phone" required value="${esc(value.phone)}" /></label><label class="field">Email<input class="input" name="email" type="email" required value="${esc(value.email)}" /></label></div>
+      <div class="two"><label class="field">Kota<select class="select" name="city">${cityOptions(value.city, 'Pilih kota')}</select></label><label class="field">Kategori<select class="select" name="categoryId">${categoryOptions(value.categoryId, 'Pilih kategori')}</select></label></div>
+      <label class="field">Alamat / area<input class="input" name="location" required value="${esc(value.location)}" /></label>
+      <label class="check"><input type="checkbox" name="verified" ${value.verified ? 'checked' : ''}/> Terverifikasi</label>
+      <label class="check"><input type="checkbox" name="active" ${value.active ? 'checked' : ''}/> Aktif dan tampil ke pelanggan</label>
+      <p class="form-error" id="form-error"></p>
+      <button class="btn btn-primary" type="submit">Simpan</button>
+    </form>
+    ${existing ? `<form class="card pad form-grid" id="folio-form" style="margin-top:14px"><h2>Tambah portofolio</h2><label class="field">Judul<input class="input" name="title" required /></label><label class="field">Deskripsi<textarea class="input" name="description"></textarea></label><div class="two"><label class="field">Tanggal<input class="input" name="date" type="date" required /></label><label class="field">Foto https<input class="input" name="image" required /></label></div><button class="btn" type="submit">Tambah</button></form>` : ''}`;
+  document.getElementById('provider-form').onsubmit = async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const body = {
+      name: form.name.value,
+      businessName: form.businessName.value,
+      image: form.image.value,
+      description: form.description.value,
+      phone: form.phone.value,
+      email: form.email.value,
+      city: form.city.value,
+      categoryId: form.categoryId.value,
+      location: form.location.value,
+      verified: form.verified.checked,
+      active: form.active.checked,
+    };
+    try {
+      if (existing) await api(`/api/providers/${existing.id}`, { method: 'PUT', body });
+      else await api('/api/providers', { method: 'POST', body });
+      toast('Penyedia disimpan');
+      location.hash = '/admin/penyedia';
+    } catch (error) {
+      document.getElementById('form-error').textContent = error.message;
+    }
+  };
+  document.getElementById('folio-form')?.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      await api(`/api/providers/${existing.id}/portfolio`, { method: 'POST', body: { title: event.target.title.value, description: event.target.description.value, date: event.target.date.value, image: event.target.image.value, category: existing.categoryName } });
+      toast('Portofolio ditambahkan');
+      event.target.reset();
+    } catch (error) {
+      toast('Gagal menambah portofolio', error.message, 'error');
+    }
   });
-  document.querySelectorAll('[data-countdown-bar]').forEach((el) => {
-    const left = Math.max(0, Date.parse(el.dataset.countdownBar) - now);
-    el.style.width = `${(left / 120000) * 100}%`;
+}
+
+async function adminServices(view, route, stale) {
+  const id = route.parts[2];
+  if (id) return serviceEditor(view, id === 'baru' ? null : id, stale);
+  const { services } = await api('/api/services?kelola=1');
+  if (stale()) return;
+  view.innerHTML = `
+    <div class="section-head"><h1 class="display" style="font-size:2rem">Jasa</h1><a class="btn btn-primary" href="#/admin/jasa/baru">Tambah jasa</a></div>
+    <div class="card table-wrap"><table><thead><tr><th>Jasa</th><th>Penyedia</th><th>Harga mulai</th><th>Status</th><th></th></tr></thead><tbody>
+      ${services.map((service) => `<tr><td><strong>${esc(service.name)}</strong><br><span class="small muted">${esc(service.categoryName)} · ${esc(service.city)}</span></td><td>${esc(service.providerName)}</td><td>${rupiah(service.price)}</td><td>${service.active ? 'Aktif' : 'Nonaktif'}${service.available ? '' : ' · Penuh'}${service.featured ? ' · Unggulan' : ''}</td><td><a class="btn btn-sm" href="#/admin/jasa/${service.id}">Ubah</a> <button class="btn btn-sm btn-danger" data-del="${service.id}" type="button">Hapus</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+  view.onclick = async (event) => {
+    const del = event.target.closest('[data-del]');
+    if (!del) return;
+    const ok = await confirmDialog({ title: 'Hapus jasa ini?', text: 'Jasa tidak lagi tampil di pencarian pelanggan.', confirm: 'Hapus', danger: true });
+    if (!ok) return;
+    await api(`/api/services/${del.dataset.del}`, { method: 'DELETE' });
+    toast('Jasa dihapus');
+    draw();
+  };
+}
+
+async function serviceEditor(view, id, stale) {
+  const [{ providers }, existingData] = await Promise.all([api('/api/providers?kelola=1'), id ? api(`/api/services/${id}?kelola=1`) : Promise.resolve(null)]);
+  if (stale()) return;
+  const existing = existingData?.service;
+  const packages = existing?.packages?.length ? existing.packages : [{ name: '', description: '', price: '', duration: '' }];
+  const images = existing?.images?.length ? existing.images : [''];
+  view.innerHTML = `
+    <h1 class="display" style="font-size:2rem;margin-bottom:12px">${existing ? 'Ubah jasa' : 'Jasa baru'}</h1>
+    <form class="card pad form-grid" id="service-form">
+      <label class="field">Nama jasa<input class="input" name="name" required value="${esc(existing?.name || '')}" /></label>
+      <div class="two"><label class="field">Penyedia<select class="select" name="providerId">${providers.map((provider) => `<option value="${provider.id}" ${provider.id === existing?.providerId ? 'selected' : ''}>${esc(provider.businessName)}</option>`).join('')}</select></label>
+      <label class="field">Kategori<select class="select" name="categoryId">${categoryOptions(existing?.categoryId || '', 'Pilih')}</select></label></div>
+      <label class="field">Deskripsi<textarea class="input" name="description" required minlength="20">${esc(existing?.description || '')}</textarea></label>
+      <div class="two"><label class="field">Kota<select class="select" name="city">${cityOptions(existing?.city || '', 'Pilih kota')}</select></label><label class="field">Area layanan<input class="input" name="location" required value="${esc(existing?.location || '')}" /></label></div>
+      <div><div class="row"><strong>Paket</strong><button class="btn btn-sm" type="button" id="add-pkg">Tambah paket</button></div><div id="pkg-list" class="stack" style="margin-top:8px"></div></div>
+      <div><div class="row"><strong>Foto (tautan https)</strong><button class="btn btn-sm" type="button" id="add-img">Tambah foto</button></div><div id="img-list" class="stack" style="margin-top:8px"></div></div>
+      <label class="check"><input type="checkbox" name="available" ${existing?.available !== false ? 'checked' : ''}/> Menerima pesanan</label>
+      <label class="check"><input type="checkbox" name="active" ${existing?.active !== false ? 'checked' : ''}/> Tampil di situs</label>
+      <label class="check"><input type="checkbox" name="featured" ${existing?.featured ? 'checked' : ''}/> Jadikan unggulan</label>
+      <p class="form-error" id="form-error"></p>
+      <button class="btn btn-primary" type="submit">Simpan jasa</button>
+    </form>`;
+  const pkgList = document.getElementById('pkg-list');
+  const imgList = document.getElementById('img-list');
+  const addPkg = (pkg = { name: '', description: '', price: '', duration: '' }) => {
+    const row = document.createElement('div');
+    row.className = 'card pad';
+    row.innerHTML = `<div class="two"><input class="input" data-name placeholder="Nama paket" value="${esc(pkg.name)}" /><input class="input" data-price type="number" placeholder="Harga" value="${esc(pkg.price)}" /></div><div class="two" style="margin-top:8px"><input class="input" data-duration placeholder="Durasi" value="${esc(pkg.duration || '')}" /><input class="input" data-desc placeholder="Deskripsi singkat" value="${esc(pkg.description || '')}" /></div>`;
+    pkgList.append(row);
+  };
+  const addImg = (url = '') => {
+    const row = document.createElement('input');
+    row.className = 'input';
+    row.dataset.image = '1';
+    row.placeholder = 'https://';
+    row.value = url;
+    imgList.append(row);
+  };
+  packages.forEach(addPkg);
+  images.forEach(addImg);
+  document.getElementById('add-pkg').onclick = () => addPkg();
+  document.getElementById('add-img').onclick = () => addImg();
+  document.getElementById('service-form').onsubmit = async (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const body = {
+      name: form.name.value,
+      providerId: form.providerId.value,
+      categoryId: form.categoryId.value,
+      description: form.description.value,
+      city: form.city.value,
+      location: form.location.value,
+      packages: [...pkgList.children].map((row) => ({ name: row.querySelector('[data-name]').value, price: Number(row.querySelector('[data-price]').value), duration: row.querySelector('[data-duration]').value, description: row.querySelector('[data-desc]').value })),
+      images: [...imgList.querySelectorAll('[data-image]')].map((input) => input.value).filter(Boolean),
+      available: form.available.checked,
+      active: form.active.checked,
+      featured: form.featured.checked,
+    };
+    try {
+      if (existing) await api(`/api/services/${existing.id}`, { method: 'PUT', body });
+      else await api('/api/services', { method: 'POST', body });
+      toast('Jasa disimpan', 'Perubahan sudah tampil di situs pelanggan.');
+      location.hash = '/admin/jasa';
+    } catch (error) {
+      document.getElementById('form-error').textContent = error.message;
+    }
+  };
+}
+
+async function adminCategories(view, stale) {
+  const { categories } = await api('/api/categories');
+  if (stale()) return;
+  state.categories = categories;
+  view.innerHTML = `
+    <h1 class="display" style="font-size:2rem;margin-bottom:12px">Kategori</h1>
+    <form class="card pad row" id="cat-form"><input class="input" name="name" placeholder="Nama kategori baru" required minlength="3" /><button class="btn btn-primary" type="submit">Tambah</button></form>
+    <div class="card table-wrap" style="margin-top:12px"><table><thead><tr><th>Nama</th><th>Jumlah jasa</th><th></th></tr></thead><tbody>
+      ${categories.map((category) => `<tr><td><input class="input" value="${esc(category.name)}" data-name="${category.id}" /></td><td>${category.serviceCount}</td><td class="row"><button class="btn btn-sm" data-save="${category.id}" type="button">Simpan</button><button class="btn btn-sm btn-danger" data-del="${category.id}" type="button">Hapus</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+  document.getElementById('cat-form').onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      await api('/api/categories', { method: 'POST', body: { name: event.target.name.value } });
+      toast('Kategori ditambahkan');
+      draw();
+    } catch (error) {
+      toast('Gagal', error.message, 'error');
+    }
+  };
+  view.onclick = async (event) => {
+    const save = event.target.closest('[data-save]');
+    const del = event.target.closest('[data-del]');
+    if (save) {
+      const name = view.querySelector(`[data-name="${save.dataset.save}"]`).value;
+      try {
+        await api(`/api/categories/${save.dataset.save}`, { method: 'PUT', body: { name } });
+        toast('Kategori diperbarui');
+        draw();
+      } catch (error) {
+        toast('Gagal', error.message, 'error');
+      }
+    }
+    if (del) {
+      const ok = await confirmDialog({ title: 'Hapus kategori?', text: 'Hanya bisa jika tidak ada jasa atau penyedia yang memakainya.', confirm: 'Hapus', danger: true });
+      if (!ok) return;
+      try {
+        await api(`/api/categories/${del.dataset.del}`, { method: 'DELETE' });
+        toast('Kategori dihapus');
+        draw();
+      } catch (error) {
+        toast('Tidak bisa dihapus', error.message, 'error');
+      }
+    }
+  };
+}
+
+async function adminBookings(view, stale) {
+  const { bookings } = await api('/api/bookings');
+  if (stale()) return;
+  view.innerHTML = `
+    <h1 class="display" style="font-size:2rem;margin-bottom:12px">Pesanan</h1>
+    <div class="card table-wrap"><table><thead><tr><th>ID</th><th>Pelanggan</th><th>Jasa</th><th>Jadwal</th><th>Total</th><th>Status</th></tr></thead><tbody>
+      ${bookings
+        .map(
+          (booking) => `<tr><td><a href="#/pesanan/${booking.id}">${esc(booking.id)}</a></td><td>${esc(booking.customerName)}</td><td>${esc(booking.serviceName)}<br><span class="small muted">${esc(booking.providerName)}</span></td><td>${formatDate(booking.date)} ${esc(booking.time)}</td><td>${rupiah(booking.total)}</td><td><select class="select" data-status="${booking.id}">${Object.entries(STATUS_LABEL).map(([value, label]) => `<option value="${value}" ${booking.status === value ? 'selected' : ''}>${label}</option>`).join('')}</select></td></tr>`,
+        )
+        .join('')}
+    </tbody></table></div>`;
+  view.onchange = async (event) => {
+    const select = event.target.closest('[data-status]');
+    if (!select) return;
+    try {
+      await api(`/api/bookings/${select.dataset.status}`, { method: 'PUT', body: { status: select.value } });
+      toast('Status diperbarui', 'Pelanggan akan melihat status yang baru.');
+    } catch (error) {
+      toast('Gagal', error.message, 'error');
+    }
+  };
+}
+
+async function adminReviews(view, stale) {
+  const { reviews } = await api('/api/reviews');
+  if (stale()) return;
+  view.innerHTML = `<h1 class="display" style="font-size:2rem;margin-bottom:12px">Ulasan</h1><div class="reviews">${reviews.map(reviewCard).join('') || '<p class="muted">Belum ada ulasan.</p>'}</div>`;
+}
+
+async function adminCustomers(view, stale) {
+  const { customers } = await api('/api/customers');
+  if (stale()) return;
+  view.innerHTML = `<h1 class="display" style="font-size:2rem;margin-bottom:12px">Pelanggan</h1><div class="card table-wrap"><table><thead><tr><th>Nama</th><th>Email</th><th>Telepon</th><th>Bergabung</th></tr></thead><tbody>
+    ${customers.map((customer) => `<tr><td>${esc(customer.name)}</td><td>${esc(customer.email)}</td><td>${esc(customer.phone)}</td><td>${formatDate(customer.createdAt)}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+async function adminSettings(view, stale) {
+  const { settings } = await api('/api/settings');
+  if (stale()) return;
+  view.innerHTML = `
+    <h1 class="display" style="font-size:2rem;margin-bottom:12px">Pengaturan</h1>
+    <form class="card pad form-grid" id="settings-form" style="max-width:520px">
+      <label class="field">Biaya platform (%)<input class="input" name="platformFeePercent" type="number" min="0" max="30" required value="${settings.platformFeePercent}" /></label>
+      <label class="field">Email dukungan<input class="input" name="supportEmail" type="email" required value="${esc(settings.supportEmail)}" /></label>
+      <p class="small muted">Biaya ini ditambahkan pada setiap pesanan baru. Pesanan yang sudah dibuat tidak berubah.</p>
+      <button class="btn btn-primary" type="submit">Simpan</button>
+    </form>`;
+  document.getElementById('settings-form').onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      const data = await api('/api/settings', { method: 'PUT', body: { platformFeePercent: Number(event.target.platformFeePercent.value), supportEmail: event.target.supportEmail.value } });
+      state.settings = data.settings;
+      toast('Pengaturan disimpan');
+    } catch (error) {
+      toast('Gagal', error.message, 'error');
+    }
+  };
+}
+
+function draw() {
+  const generation = bumpGeneration();
+  const route = parseRoute();
+  const stale = () => !isCurrent(generation);
+  if (route.parts[0] === 'admin' && state.user?.role !== 'admin') {
+    location.hash = `/masuk?lanjut=${encodeURIComponent(route.path)}`;
+    return;
+  }
+  if (route.parts[0] === 'akun' && state.user?.role !== 'customer') {
+    location.hash = state.user?.role === 'admin' ? '/admin' : `/masuk?lanjut=${encodeURIComponent(route.path + (location.hash.includes('?') ? `?${location.hash.split('?')[1]}` : ''))}`;
+    return;
+  }
+  if (route.parts[0] === 'pesan' && state.user?.role !== 'customer') {
+    location.hash = `/masuk?lanjut=${encodeURIComponent(`/pesan/${route.parts[1] || ''}`)}`;
+    return;
+  }
+  const home = route.parts.length === 0;
+  const view = route.parts[0] === 'admin' ? paintAdmin(route) : paintPublic(route);
+  if (home) document.querySelector('.topbar').insertAdjacentHTML('afterend', homeHero());
+  if (home) {
+    document.getElementById('home-search').onsubmit = (event) => {
+      event.preventDefault();
+      const data = new FormData(event.target);
+      setCity(String(data.get('city') || ''));
+      const query = new URLSearchParams();
+      if (data.get('q')) query.set('q', String(data.get('q')));
+      if (data.get('city')) query.set('city', String(data.get('city')));
+      location.hash = `/jelajah${query.toString() ? `?${query}` : ''}`;
+    };
+  }
+  const pages = {
+    '': pageHome,
+    jelajah: pageExplore,
+    'cara-kerja': pageHow,
+    tentang: pageAbout,
+    masuk: pageLogin,
+    daftar: pageRegister,
+    'lupa-sandi': pageForgot,
+    'atur-sandi': pageReset,
+    jasa: pageService,
+    penyedia: pageProvider,
+    bandingkan: pageCompare,
+    pesan: pageBook,
+    pesanan: pageOrder,
+    akun: pageAccount,
+    admin: pageAdmin,
+  };
+  const page = pages[route.parts[0] || ''];
+  if (!page) {
+    view.innerHTML = emptyState({ title: 'Halaman tidak ditemukan', text: 'Tautan ini tidak mengarah ke halaman Andallo.', action: '<a class="btn" href="#/">Ke beranda</a>' });
+    return;
+  }
+  Promise.resolve(page(view, route, stale)).catch((error) => {
+    if (!stale()) view.innerHTML = errorBox(error instanceof ApiError ? error.message : 'Halaman gagal dimuat.');
   });
 }
-setInterval(tickCountdowns, 1000);
-
-// ---------- boot ----------
 
 async function boot() {
-  if (state.token) {
-    try {
-      state.user = (await api('/api/me')).user;
-      await loadSessionData();
-      connectEvents();
-    } catch {
-      state.token = null;
-      state.user = null;
-      localStorage.removeItem(TOKEN_KEY);
+  try {
+    if (state.token) {
+      try {
+        state.user = (await api('/api/me')).user;
+      } catch {
+        setSession('', null);
+      }
     }
+    const [categories, settings] = await Promise.all([api('/api/categories'), api('/api/settings')]);
+    state.categories = categories.categories;
+    state.settings = settings.settings;
+  } catch (error) {
+    document.getElementById('app').innerHTML = `<div class="page">${errorBox(error.message || 'Gagal memuat Andallo')}</div>`;
+    return;
   }
-  render();
+  window.addEventListener('hashchange', draw);
+  draw();
 }
 
 boot();

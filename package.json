@@ -3,7 +3,7 @@
   "version": "3.1.0",
   "private": true,
   "type": "module",
-  "description": "Andallo service marketplace with booking, live location, chat, and role-based dashboards.",
+  "description": "Andallo, marketplace jasa untuk pelanggan dan admin.",
   "engines": {
     "node": "22.x"
   },

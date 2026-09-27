@@ -1,108 +1,57 @@
-# Andallo Blue Services
+# Andallo
 
-Marketplace jasa Andallo: customer mencari penyedia jasa terdekat, memesan jadwal yang masih kosong, lalu memantau pesanan lewat live tracking dan chat. Mitra (penyedia) dan Admin menerima/menolak pesanan dalam batas 2 menit dan memperbarui status layanan.
+Marketplace jasa: pelanggan mencari, membandingkan, dan memesan penyedia di sekitar mereka. Admin mengelola penyedia, jasa, kategori, pesanan, dan ulasan.
 
-Referensi tampilan: https://andallo-blue-services.nananishuw.chatgpt.site/
+Tagline: **Andallo, jasa andalanmu setiap saat.**
 
-## Kebutuhan
-
-- Node.js 22 (Vercel memakai `22.x`)
-- Tidak ada dependency npm — server hanya memakai modul bawaan Node.js
-- Browser membutuhkan internet untuk Leaflet (unpkg), tile OpenStreetMap, font, dan foto Unsplash
+Hanya ada dua peran: pelanggan dan admin. Penyedia tidak punya akun login.
 
 ## Menjalankan
 
-```bash
-npm start            # http://localhost:3000
-PORT=4317 npm start  # port lain
-npm run dev          # auto-restart saat file berubah
-npm test             # test API (node:test)
-```
-
-Konfigurasi opsional: salin `.env.example` menjadi `.env`. File `.env` dibaca otomatis saat start.
-
-### Docker
-
-```bash
-docker build -t andallo .
-docker run -p 3000:3000 -v "$PWD/data:/app/data" andallo
-```
-
-## Akun demo
-
-Semua akun memakai kata sandi `demo123`.
-
-| Peran    | Email               |
-| -------- | ------------------- |
-| Customer | rieke@andallo.com   |
-| Mitra    | mitra@andallo.com   |
-| Admin    | admin@andallo.com   |
-
-## Struktur project
-
-```text
-server.js                 Backend HTTP + REST API + SSE (tanpa dependency)
-api/[...path].js          Entry serverless untuk Vercel (memakai server.js yang sama)
-public/index.html         Shell web app (satu app untuk Customer, Mitra, Admin)
-public/app.js             Logika UI: routing, booking, tracking, chat, dashboard
-public/app.css            Styling responsive (desktop, tablet, mobile)
-public/assets/            Logo Andallo
-data/db.json              Database JSON (penyedia, user, booking, notifikasi, template chat)
-test/api.test.js          Test API end-to-end
-.env.example              Contoh konfigurasi (port, sesi, WhatsApp Cloud API)
-vercel.json               Konfigurasi production Vercel
-Dockerfile                Deployment container
-```
-
-## Fitur
-
-- Login berbasis peran; navbar untuk Customer/Mitra, sidebar untuk Admin
-- Pencarian jasa, filter kategori, sorting (terdekat, rating, harga)
-- Jarak penyedia dari lokasi pengguna (geolokasi browser, default pusat Bekasi)
-- Peta Leaflet + OpenStreetMap
-- Kalender booking: tanggal yang sudah memiliki pesanan aktif ditandai merah dan tidak bisa dipilih
-- Persetujuan pesanan maksimal 2 menit (otomatis kedaluwarsa), tombol Terima/Tolak untuk Mitra dan Admin
-- Lifecycle: Menunggu → Diterima → Dalam perjalanan → Sedang dikerjakan → Selesai (atau Ditolak / Kedaluwarsa / Dibatalkan)
-- Live location customer & penyedia saat pesanan aktif
-- Chat per pesanan dengan template pertanyaan/jawaban cepat dan balasan otomatis AI Andallo
-- Notifikasi real-time via Server-Sent Events
-- Rating 1–5 setelah pesanan selesai
-- Notifikasi WhatsApp Cloud API bila `WHATSAPP_TOKEN` dan `WHATSAPP_PHONE_NUMBER_ID` diisi; tanpa kredensial, notifikasi tetap tampil di dashboard
-
-## API ringkas
-
-Semua endpoint di bawah `/api`. Endpoint terproteksi memakai header `Authorization: Bearer <token>` dari `POST /api/auth/login`.
-
-| Method | Path | Akses |
-| ------ | ---- | ----- |
-| POST | `/auth/login`, `/auth/logout` | publik |
-| GET | `/me`, `/notifications`, `/chat-templates` | login |
-| GET | `/categories`, `/providers`, `/providers/:id`, `/providers/:id/booked-dates` | publik |
-| GET/POST | `/bookings` | login / customer |
-| GET | `/bookings/:id` | pihak terkait |
-| POST | `/bookings/:id/decision` | mitra pemilik, admin |
-| POST | `/bookings/:id/status` | sesuai peran & status |
-| POST | `/bookings/:id/location` | customer, mitra |
-| GET/POST | `/bookings/:id/chat` | pihak terkait |
-| POST | `/bookings/:id/rating` | customer, setelah selesai |
-| GET | `/admin/overview` | admin |
-| GET | `/events?token=` | SSE, login |
-
-## Catatan keamanan & data
-
-- Kata sandi disimpan sebagai hash scrypt (`passwordHash`). File `db.json` lama yang masih berisi `password` teks biasa akan dimigrasi otomatis saat server start.
-- Sesi adalah token bertanda tangan (HMAC) yang berlaku 12 jam. Logout menyimpan hash token yang dibatalkan di database.
-- `data/db.json` ditulis ulang oleh server setiap ada perubahan (penulisan atomik). Cocok untuk demo/instans tunggal, bukan untuk banyak instans sekaligus.
-- Di Vercel, database disalin ke `/tmp` dan tidak bertahan selamanya: instance baru kembali ke data awal. Set `SESSION_SECRET` di environment Vercel sebelum dipakai sungguhan.
-- Pembayaran belum terhubung payment gateway.
-
-## Deploy ke Vercel
-
-Project ini memakai npm, tanpa framework frontend. Halaman statis ada di `public/`, API ada di `api/[...path].js`. Tidak ada langkah build selain pemeriksaan sintaks di `vercel.json`.
+Butuh Node.js 22. Tidak ada dependency npm.
 
 ```bash
 npm test
+npm start
+```
+
+Buka http://localhost:3000
+
+Salin `.env.example` menjadi `.env` bila ingin mengatur `SESSION_SECRET`. Tanpa variabel itu, aplikasi memakai kunci demo dan menuliskan peringatan.
+
+### Akun demo
+
+Kata sandi semua akun: `Demo1234`
+
+| Peran | Email |
+| --- | --- |
+| Pelanggan | rieke@andallo.com |
+| Admin | admin@andallo.com |
+
+Pelanggan lain untuk data ulasan: `dina@andallo.com`, `budi@andallo.com`, `sari@andallo.com`.
+
+## Data
+
+`data/db.json` adalah penyimpanan demo (pengguna, penyedia, jasa, portofolio, ulasan, pesanan, simpanan). Akses data ada di `lib/data.js` supaya nanti bisa diganti PostgreSQL atau Supabase tanpa mengubah halaman.
+
+Ulangi data awal:
+
+```bash
+node scripts/seed.js
+```
+
+Kata sandi disimpan sebagai hash scrypt. Ulasan hanya bisa ditulis pelanggan yang pesanannya berstatus selesai.
+
+Di Vercel, file database disalin ke `/tmp` dan kembali ke data awal saat instance baru. Set `SESSION_SECRET` di environment project.
+
+## Vercel
+
+`public/` adalah situs. `api/[...path].js` menjalankan API yang sama dengan `server.js`.
+
+```bash
+npm test
+node --check server.js && node --check lib/data.js && node --check lib/auth.js && node --check lib/store.js && node --check "api/[...path].js"
 git push origin main
 ```
 
-Lalu di Vercel: **Add New → Project → Import** `Riekesetiawati/Andallo`, branch `main`. Framework preset biarkan kosong (Other). Environment opsional: `SESSION_SECRET`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`.
+Import repo `Riekesetiawati/Andallo`, branch `main`, framework Other.
