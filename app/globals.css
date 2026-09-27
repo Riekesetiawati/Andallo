@@ -1,0 +1,45 @@
+@import "tailwindcss";
+
+@theme {
+  --color-pine: #0e3b2e;
+  --color-pine-dark: #0a2b21;
+  --color-leaf: #1f7a4d;
+  --color-mint: #e7f6ee;
+  --color-orange: #e36b1e;
+  --color-orange-dark: #c25612;
+  --color-sand: #f6f3ee;
+  --color-ink: #1c1917;
+  --color-muted: #5c675f;
+  --color-line: #e6dfd4;
+  --font-sans: var(--font-outfit), sans-serif;
+  --font-display: var(--font-fraunces), serif;
+}
+
+html { scroll-behavior: smooth; }
+body { background: var(--color-sand); color: var(--color-ink); font-family: var(--font-sans); }
+h1, h2, .display { font-family: var(--font-display); font-weight: 560; letter-spacing: -0.02em; }
+button, input, select, textarea { font: inherit; }
+:focus-visible { outline: 2px solid var(--color-orange); outline-offset: 2px; }
+
+.container { width: min(1160px, calc(100% - 32px)); margin-inline: auto; }
+.card { background: white; border: 1px solid var(--color-line); border-radius: 20px; box-shadow: 0 10px 30px rgba(14, 59, 46, 0.04); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--color-line); background: white; font-weight: 700; }
+.btn-primary { background: var(--color-orange); border-color: var(--color-orange); color: white; }
+.btn-primary:hover { background: var(--color-orange-dark); }
+.btn-pine { background: var(--color-pine); border-color: var(--color-pine); color: white; }
+.btn-ghost { background: transparent; }
+.field { display: grid; gap: 6px; font-weight: 650; font-size: 0.92rem; }
+.input, .select { width: 100%; min-height: 46px; border-radius: 14px; border: 1px solid var(--color-line); background: white; padding: 10px 12px; }
+.badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; background: var(--color-mint); color: var(--color-leaf); font-size: 0.75rem; font-weight: 800; padding: 4px 8px; }
+.table-wrap { overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+th, td { text-align: left; padding: 12px; border-bottom: 1px solid var(--color-line); vertical-align: top; }
+th { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-muted); }
+.leaflet-container { height: 100%; width: 100%; border-radius: 16px; z-index: 0; }
+
+@media (max-width: 1024px) {
+  .desktop-nav { display: none; }
+}
+@media (min-width: 1025px) {
+  .mobile-only, .mobile-menu { display: none !important; }
+}

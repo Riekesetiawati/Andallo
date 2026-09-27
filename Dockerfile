@@ -1,17 +1,9 @@
 FROM node:22-alpine
-
 WORKDIR /app
-ENV NODE_ENV=production PORT=3000
-
 COPY package.json package-lock.json ./
-COPY server.js ./
-COPY lib ./lib
-COPY api ./api
-COPY public ./public
-COPY data ./data
-
-RUN chown -R node:node /app
-USER node
-
+RUN npm ci
+COPY . .
+RUN npm run build
+ENV NODE_ENV=production
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["npm", "start"]
