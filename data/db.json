@@ -2,25 +2,25 @@
   "users": [
     {
       "email": "rieke@andallo.com",
-      "password": "demo123",
       "name": "Rieke Setiawati",
       "role": "customer",
-      "phone": "6281234567890"
+      "phone": "6281234567890",
+      "passwordHash": "scrypt$4ee868fbd9b004d4dad8bd9a17fa8ac9$5eb2b08bc46ff6460ca6ccb4dc6ee63905f39183e26a5ee82583c8ec74526b0ff82c2927db27e86c2bfe970119713329e374315595390c4a454c2a404f406f1d"
     },
     {
       "email": "mitra@andallo.com",
-      "password": "demo123",
       "name": "Bara Barbershop",
       "role": "provider",
       "providerId": 1,
-      "phone": "6281111111111"
+      "phone": "6281111111111",
+      "passwordHash": "scrypt$5bd9916b2971b68bea85aa0555e30789$71a7b9d975070faa452444378b168bf0e8d0e8355a468316b545dec7e894efa2f4541e8f33d2e4e83dc7d06e107882a6fbc9ef5f3cc6d7f0cfd92f73918dcb9e"
     },
     {
       "email": "admin@andallo.com",
-      "password": "demo123",
       "name": "Admin Andallo",
       "role": "admin",
-      "phone": "6281222222222"
+      "phone": "6281222222222",
+      "passwordHash": "scrypt$922a69bbf6f6fb2f228cddb1aa98fa26$67a2510a7536d423ac4c37301e9e88d0a53408eec36b592e203fd4b6954385575a3e0471da4d173a005a794cf3f514e5c7a56b7c47c81cc38301e3626024f13d"
     }
   ],
   "providers": [
@@ -798,7 +798,7 @@
         "ulasan",
         "bintang"
       ],
-      "answer": "Rating 1\u20135 hanya aktif setelah status pesanan SELESAI."
+      "answer": "Rating 1–5 hanya aktif setelah status pesanan SELESAI."
     },
     {
       "keywords": [
@@ -808,5 +808,19 @@
       ],
       "answer": "Pesanan yang ditolak atau kedaluwarsa tidak mengunci tanggal lagi. Customer bisa memilih ulang penyedia atau tanggal lain."
     }
-  ]
+  ],
+  "chatTemplates": {
+    "customer": [
+      "Apakah pesanan saya sudah dikonfirmasi?",
+      "Sudah sampai mana?",
+      "Berapa lama lagi sampai?",
+      "Saya sudah di lokasi."
+    ],
+    "provider": [
+      "Pesanan sudah saya terima, terima kasih.",
+      "Saya sedang dalam perjalanan.",
+      "Sekitar 15 menit lagi sampai.",
+      "Saya sudah tiba di lokasi."
+    ]
+  }
 }
