@@ -799,12 +799,18 @@ export function createApp({ dbFile = path.join(ROOT, 'data', 'db.json'), env = p
   sweeper.unref();
   expirePendingBookings();
 
-  server.on('close', () => {
+  // SSE responses never finish on their own, so they must be ended before server.close() can resolve.
+  function close() {
     clearInterval(sweeper);
     for (const set of sseClients.values()) for (const res of set) res.end();
-  });
+    sseClients.clear();
+    return new Promise((resolve) => {
+      server.close(() => store.flush().then(resolve));
+      server.closeIdleConnections();
+    });
+  }
 
-  return { server, store, expirePendingBookings };
+  return { server, store, close, expirePendingBookings };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -813,11 +819,14 @@ if (isMain) {
   if (fs.existsSync(path.join(ROOT, '.env'))) process.loadEnvFile(path.join(ROOT, '.env'));
   const port = Number(process.env.PORT) || 3000;
   const host = process.env.HOST || '0.0.0.0';
-  const { server } = createApp({ dbFile: process.env.DB_FILE ? path.resolve(process.env.DB_FILE) : undefined });
-  server.listen(port, host, () => {
+  const app = createApp({ dbFile: process.env.DB_FILE ? path.resolve(process.env.DB_FILE) : undefined });
+  app.server.listen(port, host, () => {
     console.log(`Andallo berjalan di http://localhost:${port}`);
   });
-  const shutdown = () => server.close(() => process.exit(0));
+  const shutdown = () => {
+    setTimeout(() => process.exit(0), 3000).unref();
+    app.close().then(() => process.exit(0));
+  };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 }

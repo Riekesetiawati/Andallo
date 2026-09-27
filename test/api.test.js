@@ -56,8 +56,7 @@ before(async () => {
 });
 
 after(async () => {
-  await new Promise((resolve) => app.server.close(resolve));
-  await app.store.flush();
+  await app.close();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -260,7 +259,8 @@ test('SSE stream authenticates and delivers events', async () => {
   await call('POST', '/api/bookings', { token: customer, body: { providerId: 6, date: futureDate(6), time: '08:00' } });
   const text = await readUntil('event: booking');
   assert.match(text, /event: notification/);
-  controller.abort();
+  // Left open on purpose: after() must still shut the server down with a live SSE client.
+  reader.releaseLock();
 });
 
 test('admin overview returns stats without password data', async () => {

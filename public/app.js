@@ -123,8 +123,13 @@ async function api(path, { method = 'GET', body } = {}) {
 
 // ---------- maps ----------
 
+const mapAlive = (map) => Boolean(map) && state.maps.includes(map);
+
 function destroyMaps() {
-  for (const m of state.maps) m.remove();
+  for (const m of state.maps) {
+    m.stop();
+    m.remove();
+  }
   state.maps = [];
 }
 
@@ -133,13 +138,14 @@ function makeMap(el, center, zoom = 13) {
     el.innerHTML = '<div class="map-fallback">Peta tidak dapat dimuat. Periksa koneksi internet kamu.</div>';
     return null;
   }
-  const map = L.map(el, { scrollWheelZoom: false }).setView([center.lat, center.lng], zoom);
+  // Zoom animations that outlive a view change make Leaflet throw on removed maps.
+  const map = L.map(el, { scrollWheelZoom: false, zoomAnimation: false, fadeAnimation: false }).setView([center.lat, center.lng], zoom);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   }).addTo(map);
   state.maps.push(map);
-  setTimeout(() => map.invalidateSize(), 60);
+  setTimeout(() => mapAlive(map) && map.invalidateSize(), 60);
   return map;
 }
 
@@ -234,6 +240,11 @@ function parseRoute() {
   const parts = location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
   return { name: parts[0] || '', id: parts[1] || null };
 }
+
+const isStale = (route) => {
+  const now = parseRoute();
+  return now.name !== route.name || now.id !== route.id || !document.getElementById('view');
+};
 
 function render() {
   destroyMaps();
@@ -611,7 +622,7 @@ function renderExplore($view) {
       } else {
         $results.innerHTML = `<p class="muted small" style="margin-bottom:10px">${providers.length} penyedia ditemukan</p><div class="provider-grid">${providers.map(providerCard).join('')}</div>`;
       }
-      if (layer) {
+      if (layer && mapAlive(map)) {
         layer.clearLayers();
         L.marker([origin.lat, origin.lng], { icon: pinIcon('me') }).bindPopup('Lokasi kamu').addTo(layer);
         const bounds = [[origin.lat, origin.lng]];
@@ -680,9 +691,11 @@ async function renderProviderDetail($view, route) {
     provider = data.provider;
     booked = new Set(data.bookedDates);
   } catch (err) {
+    if (isStale(route)) return;
     $view.innerHTML = `<div class="card empty">${icon('store', 40)}<h3>Penyedia tidak ditemukan</h3><p>${esc(err.message)}</p><a class="btn" href="${defaultRoute()}">Kembali</a></div>`;
     return;
   }
+  if (isStale(route)) return;
   const origin = state.origin || DEFAULT_ORIGIN;
   const distance = haversine(origin, provider).toFixed(1);
   const isCustomer = state.user.role === 'customer';
@@ -970,6 +983,7 @@ async function renderBookingDetail($view, route) {
   try {
     booking = (await api(`/api/bookings/${encodeURIComponent(route.id)}`)).booking;
   } catch (err) {
+    if (isStale(route)) return;
     $view.innerHTML = `<div class="card empty">${icon('calendar', 40)}<h3>Pesanan tidak ditemukan</h3><p>${esc(err.message)}</p><a class="btn" href="${defaultRoute()}">Kembali</a></div>`;
     return;
   }
@@ -980,6 +994,7 @@ async function renderBookingDetail($view, route) {
   const role = state.user.role;
   let templates = [];
   if (role !== 'admin') templates = (await api('/api/chat-templates').catch(() => ({ templates: [] }))).templates;
+  if (isStale(route)) return;
   const backHref = role === 'admin' ? '#/admin/bookings' : '#/bookings';
   const counterpart = role === 'customer' ? booking.provider?.name : booking.customer?.name;
 
@@ -1154,7 +1169,7 @@ function refreshBookingDetail(booking) {
 }
 
 function updateTrackingMarkers(bookingId, fit = false) {
-  if (!tracking || tracking.bookingId !== bookingId || !tracking.map) return;
+  if (!tracking || tracking.bookingId !== bookingId || !mapAlive(tracking.map)) return;
   const booking = state.bookings.find((b) => b.id === bookingId);
   if (!booking) return;
   const points = {
