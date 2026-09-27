@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(ROOT, 'public');
+const SESSION_SECRET_FALLBACK = 'andallo-demo-session-secret';
 
 const APPROVAL_WINDOW_MS = 2 * 60 * 1000;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
@@ -198,6 +199,29 @@ function nextId(items, start = 1) {
   return items.reduce((max, item) => Math.max(max, Number(item.id) || 0), start - 1) + 1;
 }
 
+// The bundled seed is traced from a few locations because Vercel places
+// included files at the project root, not next to the compiled function.
+function seedDbPath() {
+  const candidates = [
+    path.join(ROOT, 'data', 'db.json'),
+    path.join(process.cwd(), 'data', 'db.json'),
+    path.join(ROOT, '..', 'data', 'db.json'),
+  ];
+  const found = candidates.find((p) => fs.existsSync(p));
+  if (!found) throw new Error('data/db.json tidak ditemukan di paket deployment.');
+  return found;
+}
+
+export function defaultDbFile(env = process.env) {
+  if (env.DB_FILE) return path.resolve(env.DB_FILE);
+  if (env.VERCEL) {
+    const tmp = env.VERCEL_DB_FILE || path.join('/tmp', 'andallo-db.json');
+    if (!fs.existsSync(tmp)) fs.copyFileSync(seedDbPath(), tmp);
+    return tmp;
+  }
+  return path.join(ROOT, 'data', 'db.json');
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -222,6 +246,28 @@ function readBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+async function requestBody(req) {
+  const already = req.body;
+  if (already && typeof already === 'object' && !Buffer.isBuffer(already) && !Array.isArray(already)) return already;
+  if (typeof already === 'string' && already.length) {
+    try {
+      const parsed = JSON.parse(already);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      throw new HttpError(400, 'Body harus berupa JSON yang valid.');
+    }
+  }
+  if (Buffer.isBuffer(already) && already.length) {
+    try {
+      const parsed = JSON.parse(already.toString('utf8'));
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      throw new HttpError(400, 'Body harus berupa JSON yang valid.');
+    }
+  }
+  return readBody(req);
 }
 
 function sendJson(res, status, payload) {
@@ -267,12 +313,12 @@ function createWhatsApp(env) {
 
 // ---------- application ----------
 
-export function createApp({ dbFile = path.join(ROOT, 'data', 'db.json'), env = process.env } = {}) {
-  const store = createStore(dbFile);
+export function createApp({ dbFile, env = process.env, background = true } = {}) {
+  const store = createStore(dbFile || defaultDbFile(env));
   const whatsapp = createWhatsApp(env);
-  const sessions = new Map();
   const loginFailures = new Map();
   const sseClients = new Map();
+  const secret = env.SESSION_SECRET || SESSION_SECRET_FALLBACK;
 
   const db = () => store.data;
   const findUser = (email) => db().users.find((u) => u.email === email);
@@ -282,21 +328,45 @@ export function createApp({ dbFile = path.join(ROOT, 'data', 'db.json'), env = p
 
   // ----- sessions -----
 
+  // Tokens are signed so any serverless instance can verify them without shared memory.
   function createSession(email) {
-    const token = crypto.randomBytes(32).toString('base64url');
-    sessions.set(token, { email, expiresAt: Date.now() + SESSION_TTL_MS });
-    return token;
+    const payload = Buffer.from(JSON.stringify({ email, exp: Date.now() + SESSION_TTL_MS })).toString('base64url');
+    const sig = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+    return `${payload}.${sig}`;
+  }
+
+  function tokenHash(token) {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  function revokeToken(token) {
+    if (!token) return;
+    if (!Array.isArray(db().revokedTokens)) db().revokedTokens = [];
+    const hash = tokenHash(token);
+    if (!db().revokedTokens.includes(hash)) db().revokedTokens.push(hash);
+    if (db().revokedTokens.length > 500) db().revokedTokens.splice(0, db().revokedTokens.length - 500);
+    store.save();
   }
 
   function userFromToken(token) {
-    if (!token) return null;
-    const session = sessions.get(token);
-    if (!session) return null;
-    if (session.expiresAt < Date.now()) {
-      sessions.delete(token);
+    if (!token || typeof token !== 'string') return null;
+    const dot = token.lastIndexOf('.');
+    if (dot <= 0) return null;
+    const payload = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+    const actual = Buffer.from(sig);
+    const wanted = Buffer.from(expected);
+    if (actual.length !== wanted.length || !crypto.timingSafeEqual(actual, wanted)) return null;
+    if (db().revokedTokens?.includes(tokenHash(token))) return null;
+    let data;
+    try {
+      data = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    } catch {
       return null;
     }
-    return findUser(session.email) || null;
+    if (!data?.email || typeof data.exp !== 'number' || data.exp < Date.now()) return null;
+    return findUser(data.email) || null;
   }
 
   function requireUser(req, url, ...roles) {
@@ -449,7 +519,7 @@ export function createApp({ dbFile = path.join(ROOT, 'data', 'db.json'), env = p
 
   route('POST', '/api/auth/logout', ({ req }) => {
     const header = req.headers.authorization || '';
-    if (header.startsWith('Bearer ')) sessions.delete(header.slice(7));
+    if (header.startsWith('Bearer ')) revokeToken(header.slice(7));
     return { ok: true };
   });
 
@@ -767,7 +837,8 @@ export function createApp({ dbFile = path.join(ROOT, 'data', 'db.json'), env = p
 
   async function handler(req, res) {
     securityHeaders(res);
-    const url = new URL(req.url, 'http://localhost');
+    expirePendingBookings();
+    const url = new URL(req.url || '/', 'http://localhost');
     try {
       if (!url.pathname.startsWith('/api/')) {
         if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(405, 'Metode tidak diizinkan.');
@@ -781,7 +852,7 @@ export function createApp({ dbFile = path.join(ROOT, 'data', 'db.json'), env = p
         if (!match) continue;
         const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(match[i + 1])]));
         const user = r.auth ? requireUser(req, url, ...r.auth) : null;
-        const body = req.method === 'POST' ? await readBody(req) : {};
+        const body = req.method === 'POST' ? await requestBody(req) : {};
         const result = await r.handler({ req, url, params, body, user });
         if (result && typeof result.status === 'number' && 'body' in result) return sendJson(res, result.status, result.body);
         return sendJson(res, 200, result);
@@ -795,8 +866,8 @@ export function createApp({ dbFile = path.join(ROOT, 'data', 'db.json'), env = p
   }
 
   const server = http.createServer(handler);
-  const sweeper = setInterval(expirePendingBookings, 5000);
-  sweeper.unref();
+  const sweeper = background ? setInterval(expirePendingBookings, 5000) : null;
+  sweeper?.unref();
   expirePendingBookings();
 
   // SSE responses never finish on their own, so they must be ended before server.close() can resolve.
@@ -810,7 +881,7 @@ export function createApp({ dbFile = path.join(ROOT, 'data', 'db.json'), env = p
     });
   }
 
-  return { server, store, close, expirePendingBookings };
+  return { server, handler, store, close, expirePendingBookings };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
@@ -819,7 +890,7 @@ if (isMain) {
   if (fs.existsSync(path.join(ROOT, '.env'))) process.loadEnvFile(path.join(ROOT, '.env'));
   const port = Number(process.env.PORT) || 3000;
   const host = process.env.HOST || '0.0.0.0';
-  const app = createApp({ dbFile: process.env.DB_FILE ? path.resolve(process.env.DB_FILE) : undefined });
+  const app = createApp();
   app.server.listen(port, host, () => {
     console.log(`Andallo berjalan di http://localhost:${port}`);
   });

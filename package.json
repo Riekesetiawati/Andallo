@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Andallo service marketplace with booking, live location, chat, and role-based dashboards.",
   "engines": {
-    "node": ">=20.12"
+    "node": "22.x"
   },
   "scripts": {
     "start": "node server.js",

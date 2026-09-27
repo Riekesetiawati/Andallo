@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createApp, verifyPassword } from '../server.js';
+import { Readable } from 'node:stream';
+import { createApp, defaultDbFile, verifyPassword } from '../server.js';
 
 const SEED = path.resolve(import.meta.dirname, '../data/db.json');
 let app;
@@ -269,6 +270,81 @@ test('admin overview returns stats without password data', async () => {
   assert.equal(status, 200);
   assert.equal(data.stats.providers, 35);
   assert.ok(data.users.every((u) => u.passwordHash === undefined && u.password === undefined));
+});
+
+function invoke(handler, { method, url, headers = {}, json, parsedBody }) {
+  return new Promise((resolve, reject) => {
+    const payload = json ? Buffer.from(JSON.stringify(json)) : null;
+    const req = payload ? Readable.from([payload]) : Readable.from([]);
+    req.method = method;
+    req.url = url;
+    req.headers = headers;
+    req.socket = { remoteAddress: '127.0.0.1' };
+    if (parsedBody) req.body = parsedBody;
+    const res = {
+      statusCode: 200,
+      headers: {},
+      body: '',
+      setHeader(key, value) {
+        this.headers[key.toLowerCase()] = value;
+      },
+      writeHead(status, extra) {
+        this.statusCode = status;
+        if (extra) Object.assign(this.headers, extra);
+      },
+      write(chunk) {
+        this.body += chunk;
+        return true;
+      },
+      end(chunk) {
+        if (chunk) this.body += chunk;
+        try {
+          this.json = JSON.parse(this.body);
+        } catch {
+          this.json = null;
+        }
+        resolve(this);
+      },
+    };
+    Promise.resolve(handler(req, res)).catch(reject);
+  });
+}
+
+test('signed sessions work across instances and accept a pre-parsed JSON body', async () => {
+  await app.store.flush();
+  const other = createApp({ dbFile: path.join(tmpDir, 'db.json'), background: false });
+  try {
+    const token = await login('admin@andallo.com');
+    const me = await invoke(other.handler, {
+      method: 'GET',
+      url: '/api/me',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(me.statusCode, 200);
+    assert.equal(me.json.user.email, 'admin@andallo.com');
+
+    const loggedIn = await invoke(other.handler, {
+      method: 'POST',
+      url: '/api/auth/login',
+      parsedBody: { email: 'rieke@andallo.com', password: 'demo123' },
+    });
+    assert.equal(loggedIn.statusCode, 200, JSON.stringify(loggedIn.json));
+    assert.equal(loggedIn.json.user.role, 'customer');
+  } finally {
+    await other.close();
+  }
+});
+
+test('vercel mode seeds a writable copy of the bundled database', () => {
+  const dest = path.join(tmpDir, 'vercel-db.json');
+  const file = defaultDbFile({ VERCEL: '1', VERCEL_DB_FILE: dest });
+  assert.equal(file, dest);
+  const seeded = JSON.parse(fs.readFileSync(dest, 'utf8'));
+  assert.equal(seeded.users.length, 3);
+  seeded.users.push({ email: 'extra@andallo.com' });
+  fs.writeFileSync(dest, JSON.stringify(seeded));
+  assert.equal(defaultDbFile({ VERCEL: '1', VERCEL_DB_FILE: dest }), dest);
+  assert.equal(JSON.parse(fs.readFileSync(dest, 'utf8')).users.length, 4);
 });
 
 test('logout invalidates the session token', async () => {

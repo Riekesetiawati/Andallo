@@ -6,7 +6,7 @@ Referensi tampilan: https://andallo-blue-services.nananishuw.chatgpt.site/
 
 ## Kebutuhan
 
-- Node.js 20.12 atau lebih baru (disarankan Node 22)
+- Node.js 22 (Vercel memakai `22.x`)
 - Tidak ada dependency npm — server hanya memakai modul bawaan Node.js
 - Browser membutuhkan internet untuk Leaflet (unpkg), tile OpenStreetMap, font, dan foto Unsplash
 
@@ -42,13 +42,15 @@ Semua akun memakai kata sandi `demo123`.
 
 ```text
 server.js                 Backend HTTP + REST API + SSE (tanpa dependency)
+api/[...path].js          Entry serverless untuk Vercel (memakai server.js yang sama)
 public/index.html         Shell web app (satu app untuk Customer, Mitra, Admin)
 public/app.js             Logika UI: routing, booking, tracking, chat, dashboard
 public/app.css            Styling responsive (desktop, tablet, mobile)
 public/assets/            Logo Andallo
 data/db.json              Database JSON (penyedia, user, booking, notifikasi, template chat)
 test/api.test.js          Test API end-to-end
-.env.example              Contoh konfigurasi (port, WhatsApp Cloud API)
+.env.example              Contoh konfigurasi (port, sesi, WhatsApp Cloud API)
+vercel.json               Konfigurasi production Vercel
 Dockerfile                Deployment container
 ```
 
@@ -89,6 +91,18 @@ Semua endpoint di bawah `/api`. Endpoint terproteksi memakai header `Authorizati
 ## Catatan keamanan & data
 
 - Kata sandi disimpan sebagai hash scrypt (`passwordHash`). File `db.json` lama yang masih berisi `password` teks biasa akan dimigrasi otomatis saat server start.
-- Sesi disimpan di memori server dan berlaku 12 jam; restart server berarti semua pengguna perlu login ulang.
+- Sesi adalah token bertanda tangan (HMAC) yang berlaku 12 jam. Logout menyimpan hash token yang dibatalkan di database.
 - `data/db.json` ditulis ulang oleh server setiap ada perubahan (penulisan atomik). Cocok untuk demo/instans tunggal, bukan untuk banyak instans sekaligus.
+- Di Vercel, database disalin ke `/tmp` dan tidak bertahan selamanya: instance baru kembali ke data awal. Set `SESSION_SECRET` di environment Vercel sebelum dipakai sungguhan.
 - Pembayaran belum terhubung payment gateway.
+
+## Deploy ke Vercel
+
+Project ini memakai npm, tanpa framework frontend. Halaman statis ada di `public/`, API ada di `api/[...path].js`. Tidak ada langkah build selain pemeriksaan sintaks di `vercel.json`.
+
+```bash
+npm test
+git push origin main
+```
+
+Lalu di Vercel: **Add New → Project → Import** `Riekesetiawati/Andallo`, branch `main`. Framework preset biarkan kosong (Other). Environment opsional: `SESSION_SECRET`, `WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`.
