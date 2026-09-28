@@ -110,21 +110,26 @@ npm start
 
 ## Deployment
 
-Target: Vercel for the Next.js app, Supabase for Postgres, Auth-related email, storage, and optional realtime.
+Target: Vercel for the Next.js app, Supabase Postgres for data, and Supabase Storage for uploads.
+
+There is no `server.js`. Vercel builds this with the Next.js builder (`npm run build`). Do not set the framework to Other or a custom `node server.js` command.
+
+Production does not use a local database. `DATABASE_URL` is read at runtime. The build does not connect to Postgres.
 
 Checklist:
 
-1. Import the repository in Vercel. Framework preset: Next.js.
-2. Set `DATABASE_URL` to the Supabase pooler (not the superuser).
-3. Set a long random `SESSION_SECRET`.
-4. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
-5. Leave `ANDALLO_DEV_LINKS` and `ANDALLO_DEV_OTP` unset.
-6. Apply `supabase/migrations/0001_init.sql`. Do not apply `seed.sql`.
+1. Import the repository in Vercel. Framework preset: Next.js. Root directory: the repository root.
+2. In Project Settings → Deployment Protection, turn off Vercel Authentication for Production. While it is on, the deployment URL redirects to Vercel login and visitors cannot open the site.
+3. Set `DATABASE_URL` to the Supabase **Session pooler** URI (`*.pooler.supabase.com`, port `5432`). Do not paste a `127.0.0.1` URL. Do not use the direct `db.[ref].supabase.co` host.
+4. Set a long random `SESSION_SECRET`.
+5. Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`. Leave `ANDALLO_DEV_LINKS` and `ANDALLO_DEV_OTP` unset.
+6. Apply `supabase/migrations/0001_init.sql` in the Supabase SQL editor, including PostGIS. Do not apply `seed.sql` to production.
 7. Create the storage buckets listed above.
-8. Schedule `GET /api/cron/expire` every minute with `CRON_SECRET`, so bookings still expire if no one has the page open. The app also expires due bookings on each database transaction.
-9. Confirm `/admin` redirects anonymous visitors to `/admin/login`.
+8. Redeploy after the variables are saved. Environment changes do not apply to an already built deployment until the next deploy.
+9. Schedule `GET /api/cron/expire` every minute with `CRON_SECRET`. Open booking pages also expire due bookings.
+10. Confirm `/` renders the marketplace and `/admin` redirects anonymous visitors to `/admin/login`.
 
-Do not hardcode `localhost`. The browser calls same-origin `/api/*` routes.
+The browser calls same-origin `/api/*` routes. Chat and notifications use a short server stream that reconnects; it does not keep a process running.
 
 Payments are recorded as cash (`UNPAID` until the provider marks the booking completed). There is no payment gateway.
 

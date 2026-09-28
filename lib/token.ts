@@ -9,8 +9,15 @@ function decode(value: string) {
   return atob(value.replaceAll('-', '+').replaceAll('_', '/') + pad);
 }
 
+function sessionSecret() {
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  if (process.env.NODE_ENV === 'production') return null;
+  return 'andallo-dev-session-secret';
+}
+
 async function hmac(payload: string) {
-  const secret = process.env.SESSION_SECRET || 'andallo-dev-session-secret';
+  const secret = sessionSecret();
+  if (!secret) throw new Error('SESSION_SECRET belum diisi.');
   const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
   const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
   return encode(String.fromCharCode(...new Uint8Array(sig)));
@@ -27,12 +34,12 @@ export async function readSession(cookie: string | undefined | null): Promise<Se
   if (!cookie) return null;
   const [payload, sig] = cookie.split('.');
   if (!payload || !sig) return null;
-  const expected = await hmac(payload);
-  if (expected.length !== sig.length) return null;
-  let diff = 0;
-  for (let i = 0; i < expected.length; i += 1) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
-  if (diff !== 0) return null;
   try {
+    const expected = await hmac(payload);
+    if (expected.length !== sig.length) return null;
+    let diff = 0;
+    for (let i = 0; i < expected.length; i += 1) diff |= expected.charCodeAt(i) ^ sig.charCodeAt(i);
+    if (diff !== 0) return null;
     const data = JSON.parse(decode(payload)) as SessionPayload;
     if (!data.exp || data.exp < Date.now()) return null;
     if (!data.uid || !data.token || !data.role) return null;

@@ -22,6 +22,9 @@ export async function POST(request: Request) {
   }
   const name = `${randomUUID()}.${ext}`;
   const supabase = serviceSupabase();
+  if (!supabase && process.env.VERCEL) {
+    return NextResponse.json({ error: 'Penyimpanan produksi belum dikonfigurasi. Isi URL Supabase dan service role key.' }, { status: 503 });
+  }
   if (supabase) {
     const bytes = Buffer.from(await file.arrayBuffer());
     const objectPath = `${actor.id}/${name}`;

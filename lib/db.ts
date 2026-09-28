@@ -1,4 +1,4 @@
-import { Pool, type PoolClient } from 'pg';
+import { Pool, type PoolConfig, type PoolClient } from 'pg';
 
 export type Role = 'anon' | 'customer' | 'provider' | 'admin' | 'system';
 
@@ -17,10 +17,39 @@ declare global {
   var __andalloPool: Pool | undefined;
 }
 
+function databaseConfig(raw: string): PoolConfig {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('DATABASE_URL tidak valid.');
+  }
+  const host = url.hostname;
+  const local = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  if (process.env.VERCEL && local) {
+    throw new Error('DATABASE_URL mengarah ke localhost. Di Vercel gunakan URL Session pooler Supabase.');
+  }
+  if (!local) {
+    // Remote Postgres, including Supabase, must use TLS. sslmode=require verifies
+    // the certificate and fails on Vercel. no-verify keeps TLS without that check.
+    url.searchParams.set('sslmode', 'no-verify');
+    if (/^db\.[^.]+\.supabase\.co$/i.test(host)) {
+      console.error('[andallo-db] Direct Supabase hosts are often IPv6-only and unreachable from Vercel. Use the Session pooler host (*.pooler.supabase.com, port 5432).');
+    }
+  }
+  return {
+    connectionString: url.toString(),
+    max: process.env.VERCEL ? 1 : 10,
+    idleTimeoutMillis: 10_000,
+    connectionTimeoutMillis: 10_000,
+    allowExitOnIdle: true,
+  };
+}
+
 export function getPool() {
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL belum diisi.');
   if (!global.__andalloPool) {
-    global.__andalloPool = new Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+    global.__andalloPool = new Pool(databaseConfig(process.env.DATABASE_URL));
   }
   return global.__andalloPool;
 }
@@ -35,7 +64,11 @@ export async function withActor<T>(actor: { id?: string; role: Role }, fn: (db: 
     await db.query('COMMIT');
     return result;
   } catch (error) {
-    await db.query('ROLLBACK');
+    try {
+      await db.query('ROLLBACK');
+    } catch (rollbackError) {
+      logDbError(rollbackError);
+    }
     throw error;
   } finally {
     db.release();
@@ -56,6 +89,12 @@ export function dbErrorMessage(error: unknown) {
   if (/Maksimal 3|kategori yang sama|tidak diizinkan|tidak ditemukan|Verifikasi|kedaluwarsa|Pelacakan|sudah lewat|Paket|Mitra|Ulasan|Jadwal|wajib|Password|Email|telepon|tidak aktif|habis/.test(text)) {
     return text.replace(/^error:\s*/i, '');
   }
-  console.error(error);
+  logDbError(error);
   return 'Terjadi kesalahan saat memproses permintaan.';
+}
+
+function logDbError(error: unknown) {
+  const err = error as { code?: string; message?: string };
+  const message = (err?.message || 'unknown').replace(/postgres(?:ql)?:\/\/\S+/gi, 'postgres://***');
+  console.error('[andallo-db]', err?.code || 'error', message);
 }
